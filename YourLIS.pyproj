@@ -1,0 +1,89 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{55d08acc-980a-467f-87d8-2e2dd9a6bf91}</ProjectGuid>
+    <ProjectHome />
+    <StartupFile>main.py</StartupFile>
+    <SearchPath />
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <InterpreterId>MSBuild|lis_env|$(MSBuildProjectFullPath)</InterpreterId>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <PropertyGroup>
+    <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include=".gitignore" />
+    <Content Include="assets\icons\password_hide.svg" />
+    <Content Include="assets\icons\password_show.svg" />
+    <Content Include="assets\images\default_device.png" />
+    <Content Include="assets\images\genrui_kt60.jpg" />
+    <Content Include="assets\images\reallab.PNG" />
+    <Content Include="README.md" />
+    <Content Include="requirements.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="api\app.py" />
+    <Compile Include="database\sqlconnection.py" />
+    <Compile Include="database\sqldbdictionary.py" />
+    <Compile Include="database\sqlqueries.py" />
+    <Compile Include="database\sqlqueriesExe.py" />
+    <Compile Include="gui\api_methods.py" />
+    <Compile Include="gui\components.py" />
+    <Compile Include="gui\gui_methods.py" />
+    <Compile Include="gui\main_flet.py" />
+    <Compile Include="gui\views\about.py" />
+    <Compile Include="gui\views\cbc_report.py" />
+    <Compile Include="gui\views\dashboard.py" />
+    <Compile Include="gui\views\patient.py" />
+    <Compile Include="gui\views\report.py" />
+    <Compile Include="gui\views\report_component.py" />
+    <Compile Include="gui\views\result.py" />
+    <Compile Include="gui\views\settings.py" />
+    <Compile Include="hl7msghandel\hl7dictionary.py" />
+    <Compile Include="hl7msghandel\hl7fitsql.py" />
+    <Compile Include="hl7msghandel\hl7parser.py" />
+    <Compile Include="hl7msghandel\hl7responder.py" />
+    <Compile Include="hl7msghandel\hl7validator.py" />
+    <Compile Include="log\logger.py" />
+    <Compile Include="log\log_config.py" />
+    <Compile Include="main.py" />
+    <Compile Include="server\client_handler.py" />
+    <Compile Include="server\incoming_data.py" />
+    <Compile Include="server\outcoming_data.py" />
+    <Compile Include="server\server.py" />
+    <Compile Include="setting\config.py" />
+    <Compile Include="web_gui.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="api" />
+    <Folder Include="assets\" />
+    <Folder Include="assets\icons" />
+    <Folder Include="assets\images" />
+    <Folder Include="database" />
+    <Folder Include="gui" />
+    <Folder Include="gui\views" />
+    <Folder Include="hl7msghandel" />
+    <Folder Include="log" />
+    <Folder Include="server" />
+    <Folder Include="setting" />
+  </ItemGroup>
+  <ItemGroup>
+    <Interpreter Include="..\lis_env\">
+      <Id>lis_env</Id>
+      <Version>3.13</Version>
+      <Description>lis_env (Python 3.13 (64-bit))</Description>
+      <InterpreterPath>Scripts\python.exe</InterpreterPath>
+      <WindowsInterpreterPath>Scripts\pythonw.exe</WindowsInterpreterPath>
+      <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
+      <Architecture>X64</Architecture>
+    </Interpreter>
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+</Project>
