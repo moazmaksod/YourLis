@@ -1,6 +1,6 @@
 import uvicorn
 import socket
-from setting.config import get_config, save_config
+from setting.config import get_config, save_config, pre_startup_check
 import multiprocessing
 from gui.main_flet import main as flet_main
 from log.logger import log_info, log_error
@@ -40,7 +40,7 @@ def run_flet():
 
 
 def main():
-
+    pre_startup_check()  # Ensure config and SQL driver before anything else
     port = generate_dynamic_port()  # Generate a dynamic port
 
     # Create separate processes for Flet

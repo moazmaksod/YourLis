@@ -31,6 +31,7 @@ API_BASE_URL = f"http://{API_IP}:{API_PORT}"
 
 # application Configuration settings
 APPLICATION_NAME = "HealthMesh"
+APPLICATION_SLOGAN = " - Laboratory Information System"  # Add a default slogan
 VERSION = "1.0.0"
 LOG_DIR = "logs"
 LOG_FILE_NAME = "HealthMesh.log"
@@ -81,6 +82,7 @@ encrypt_list = [
 
 default_config_data = {
     "APPLICATION_NAME": APPLICATION_NAME,
+    "APPLICATION_SLOGAN": APPLICATION_SLOGAN,  # Add slogan to config
     "VERSION": VERSION,
     "LOG_DIR": LOG_DIR,
     "LOG_FILE_NAME": LOG_FILE_NAME,
@@ -297,3 +299,22 @@ def get_default_sql_driver() -> str:
     if not drivers:
         return "No SQL Server drivers found."
     return drivers[0]  # Return the first available driver
+
+
+def pre_startup_check():
+    """
+    Ensure config.json exists with defaults if missing, and check SQL Server driver availability.
+    """
+    # Check config.json existence
+    if not os.path.exists(CONFIG_URL):
+        log_info("Config file not found. Creating with default values.", source=SOURCE)
+        save_config(default_config_data)
+    else:
+        log_info("Config file found.", source=SOURCE)
+
+    # Check SQL Server driver
+    drivers = get_available_sql_drivers()
+    if not drivers:
+        log_warning("No SQL Server driver found. Application may not work properly.", source=SOURCE)
+    else:
+        log_info(f"SQL Server drivers available: {drivers}", source=SOURCE)
