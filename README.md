@@ -35,6 +35,7 @@ YourLIS is a Laboratory Information System (LIS) project written in Python. It a
 	```
 4. Install dependencies:
 	```bash
+ 	cd YourLIS
 	pip install -r requirements.txt
 	```
 ### Usage
