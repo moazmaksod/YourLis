@@ -17,7 +17,7 @@ YourLIS is a Laboratory Information System (LIS) project written in Python. It a
 ### Installation
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/moazmaksod/YourLis
    cd YourLIS
    ```
 2. (Recommended) Create and activate a virtual environment:
@@ -31,7 +31,7 @@ YourLIS is a Laboratory Information System (LIS) project written in Python. It a
    ```
 
 ### Usage
-Run the main application (update the command if your entry point differs):
+Run the main application :
 ```bash
 python main.py
 ```
