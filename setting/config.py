@@ -7,7 +7,8 @@ import base64
 import secrets
 import pyodbc
 from log.logger import log_info, log_error, log_warning
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Type # Added Type for type hinting
+import importlib # For dynamic adapter loading
 
 
 SOURCE = "Config"
@@ -105,7 +106,53 @@ default_config_data = {
     "APP_USER": APP_USER,
     "APP_PASSWORD": APP_PASSWORD,
     "SUPPORTED_DEVICES": SUPPORTED_DEVICES,
+    # New adapter settings
+    "DATABASE_ADAPTER_CLASS": "database.mssql_adapter.MssqlAdapter",
+    "DEVICE_ADAPTER_CONFIG": {
+        "Genrui_KT60": {"class_path": "hl7msghandel.placeholder_adapter.PlaceholderDeviceAdapter"}
+        # Add other devices here, e.g.
+        # "Sysmex_XN1000": {"class_path": "hl7msghandel.sysmex_xn1000_adapter.SysmexXn1000Adapter"}
+    },
+    "ACTIVE_DEVICE_ADAPTER_NAME": "Genrui_KT60", # Default active device
 }
+
+# Define constants for new adapter settings (defaults)
+DATABASE_ADAPTER_CLASS = default_config_data["DATABASE_ADAPTER_CLASS"]
+DEVICE_ADAPTER_CONFIG = default_config_data["DEVICE_ADAPTER_CONFIG"]
+ACTIVE_DEVICE_ADAPTER_NAME = default_config_data["ACTIVE_DEVICE_ADAPTER_NAME"]
+
+
+def load_adapter_class(class_path_string: str) -> Optional[Type]:
+    """
+    Dynamically loads a class given its full path string.
+
+    Args:
+        class_path_string: The full path to the class (e.g., "module.submodule.ClassName").
+
+    Returns:
+        The loaded class if successful, None otherwise.
+    """
+    if not class_path_string or not isinstance(class_path_string, str):
+        log_error(f"Invalid class_path_string: '{class_path_string}'. Must be a non-empty string.", source=SOURCE)
+        return None
+    try:
+        module_path, class_name = class_path_string.rsplit('.', 1)
+        module = importlib.import_module(module_path)
+        adapter_class = getattr(module, class_name)
+        log_info(f"Successfully loaded adapter class: {class_name} from {module_path}", source=SOURCE)
+        return adapter_class
+    except ImportError as e:
+        log_error(f"Error importing module {module_path}: {e}", source=SOURCE)
+        return None
+    except AttributeError as e:
+        log_error(f"Error getting class {class_name} from module {module_path}: {e}", source=SOURCE)
+        return None
+    except ValueError as e: # Handles cases where rsplit fails if class_path_string is not like "a.b"
+        log_error(f"Invalid class_path_string format '{class_path_string}': {e}. Expected 'module.ClassName'.", source=SOURCE)
+        return None
+    except Exception as e: # Catch any other unexpected errors
+        log_error(f"An unexpected error occurred while loading adapter class '{class_path_string}': {e}", source=SOURCE)
+        return None
 
 
 def generate_secure_key() -> bytes:
@@ -188,15 +235,23 @@ def _load_config(
 def get_config() -> Dict[str, Any]:
     """Get the current configuration."""
     config_data = _load_config(CONFIG_URL, encrypt_list, KEY_URL)
-    if not config_data:
-        config_data = default_config_data.copy()
+    loaded_config = default_config_data.copy() # Start with defaults
+    if config_data: # If file loaded something
+        loaded_config.update(config_data) # Override defaults with file contents
 
-    # Ensure DB_DRIVE is valid
-    if not validate_sql_driver(config_data.get("DB_DRIVE", "")):
-        config_data["DB_DRIVE"] = get_default_sql_driver()
-        log_info(f"Updated DB_DRIVE to {config_data['DB_DRIVE']}", source=SOURCE)
+    # Ensure DB_DRIVE is valid - existing logic
+    if not validate_sql_driver(loaded_config.get("DB_DRIVE", "")):
+        loaded_config["DB_DRIVE"] = get_default_sql_driver()
+        log_info(f"Updated DB_DRIVE to {loaded_config['DB_DRIVE']}", source=SOURCE)
+    
+    # Ensure new adapter config keys exist, using defaults if not present in file
+    # This is mostly handled by starting with default_config_data.copy() and updating.
+    # However, for nested dicts like DEVICE_ADAPTER_CONFIG, a simple update might not merge deeply.
+    # For this specific case, default_config_data.update(file_config) is usually sufficient if
+    # the entire DEVICE_ADAPTER_CONFIG is expected to be in the file or the default is used.
+    # If partial updates to DEVICE_ADAPTER_CONFIG were desired, more complex merging would be needed.
 
-    return config_data.copy()
+    return loaded_config # Return the merged config
 
 
 def save_config(config_data_to_save: Dict[str, Any]) -> None:

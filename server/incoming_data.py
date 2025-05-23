@@ -1,62 +1,106 @@
 from log.logger import log_info, log_error
-from hl7msghandel.hl7parser import parse_hl7_message
+# Removed: from hl7msghandel.hl7parser import parse_hl7_message
 from hl7msghandel.hl7responder import generate_response_message
 from threading import Thread
 import queue
+from typing import TYPE_CHECKING, Optional, Tuple, Any # Added for type hinting
+
+if TYPE_CHECKING:
+    from database.database_adapter import DatabaseAdapter
+    from hl7msghandel.device_adapter import DeviceAdapter
 
 # Define the source for logging purposes
-SOURCE = "Server"
+SOURCE = "Server" # Or "IncomingDataHandler" for more specificity
 
-def handle_incoming_data(message):
-
+def handle_incoming_data(
+    message: bytes, # Assuming message is bytes from the client
+    database_adapter: 'DatabaseAdapter', 
+    device_adapter: 'DeviceAdapter'
+) -> Optional[Tuple[Optional[str], Optional[str]]]:
     """
-    Handles and processes data received from a client.
+    Handles and processes data received from a client using provided adapters.
 
     Args:
-        message (str): The incoming message from the client.
+        message (bytes): The incoming message from the client.
+        database_adapter (DatabaseAdapter): Instance of the database adapter.
+        device_adapter (DeviceAdapter): Instance of the device adapter.
 
     Returns: 
-        str: The response to be sent back to the client.
+        Optional[Tuple[Optional[str], Optional[str]]]: A tuple containing the response HL7 string 
+                                                       and the sender identifier, or None if no response.
     """
     try:
-        # Create a simple response to echo back to the client
-        msg = parse_hl7_message(message, "Incomming")
-
-
         # Use a Queue to get the response from the thread
-        response_queue = queue.Queue()
+        response_queue: queue.Queue[Optional[Dict[str, Any]]] = queue.Queue()
 
         # Define a function to generate the response in a separate thread
-        def threaded_response_generation(queue):
+        def threaded_response_generation(
+            q: queue.Queue, 
+            raw_message_bytes: bytes, 
+            db_adapter: 'DatabaseAdapter', 
+            dev_adapter: 'DeviceAdapter'
+        ):
             try:
-                # Generate the response using the parsed message
-                response = generate_response_message(msg)
-                response_queue.put(response)  # Put the result in the queue
+                # Decode and parse the incoming message using device_adapter
+                # Assuming device_adapter.parse_message expects a string
+                decoded_message = raw_message_bytes.decode(errors='ignore') 
+                parsed_msg = dev_adapter.parse_message(decoded_message, "Incoming")
+
+                if not parsed_msg:
+                    log_error("Failed to parse incoming HL7 message via device adapter.", source=SOURCE)
+                    q.put(None) # Signal error or no action
+                    return
+
+                # Generate the response payload (dict) using the parsed message and adapters
+                response_payload = generate_response_message(parsed_msg, db_adapter, dev_adapter)
+                q.put(response_payload)  # Put the dictionary in the queue
             except Exception as e:
                 log_error(f"Error generating response in thread: {e}", source=SOURCE)
-                response_queue.put(None)  # Put None in case of error
+                q.put(None)  # Put None in case of error
 
-        # Start the thread
-        response_thread = Thread(target=threaded_response_generation, args=(response_queue,))
+        # Start the thread, passing adapters
+        response_thread = Thread(
+            target=threaded_response_generation, 
+            args=(response_queue, message, database_adapter, device_adapter)
+        )
         response_thread.start()
+        response_thread.join(timeout=10) # Wait for thread to complete with a timeout
 
-        # Get the response from the queue (blocking with timeout)
+        # Get the response payload (dictionary) from the queue
         try:
-            handel_response = response_queue.get(timeout=10)  # Adjust timeout as needed
-            response = handel_response["respose"]
-            sender_name_ver = handel_response["sender"]
-            parse_hl7_message(response, "Response")
+            # Check if thread is still alive after join timeout (implies queue.get might block indefinitely if not careful)
+            if response_thread.is_alive():
+                log_error("Timeout waiting for response generation thread to complete.", source=SOURCE)
+                return None
+
+            response_payload_dict = response_queue.get_nowait() # Use get_nowait as thread should have finished or timed out
         except queue.Empty:
-            log_error("Timeout waiting for response from thread.", source=SOURCE)
-            return None  # Or a suitable timeout response
+            # This case should ideally be covered by thread timeout logic, but as a fallback:
+            log_error("Response queue empty after thread processing. Possible timeout or thread error.", source=SOURCE)
+            return None
 
-        if response is None:
-            return None # Handle the error case
+        if response_payload_dict is None:
+            log_info("No response payload generated by threaded_response_generation (e.g. ACK received, error).", source=SOURCE)
+            return None 
 
-        return response,sender_name_ver
+        response_hl7_str = response_payload_dict.get("response")
+        sender_name_ver = response_payload_dict.get("sender")
+
+        # Optional: Parse/validate the outgoing response message for logging/debugging
+        if response_hl7_str:
+            log_info(f"Outgoing response generated for sender '{sender_name_ver}'. Validating format...", source=SOURCE)
+            # The second argument "Outgoing" helps contextually if parse_message logs
+            parsed_outgoing_msg = device_adapter.parse_message(response_hl7_str, "Outgoing")
+            if not parsed_outgoing_msg:
+                log_warning(f"Generated response for sender '{sender_name_ver}' could not be parsed by device adapter. Response (first 100 chars): {response_hl7_str[:100]}", source=SOURCE)
+            else:
+                log_info(f"Outgoing response for '{sender_name_ver}' successfully parsed by adapter.", source=SOURCE)
+        
+        return response_hl7_str, sender_name_ver
     
     except Exception as e:
-        log_error(f"Error handling incoming data>: {e}", source=SOURCE)
+        log_error(f"Error in handle_incoming_data: {e}", source=SOURCE)
+        return None
 
 
 
