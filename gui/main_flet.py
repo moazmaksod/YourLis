@@ -24,39 +24,10 @@ dark_mode = cfg["DARK_MODE"]
 
 
 def main(page: ft.Page):
-
-    # set font family and size
-    page.fonts = {
-        "sans_bold": r"fonts\sans\JosefinSans-Bold.ttf",
-        "sans_regular": r"fonts\sans\JosefinSans-Regular.ttf",
-        "sans_light": r"fonts\sans\JosefinSans-Light.ttf",
-    }
-
-    # set theme for light mode
-    page.theme = ft.Theme(color_scheme_seed=ft.Colors.WHITE)
-
-    # set theme for dark mode
-    page.dark_theme = ft.Theme(
-        font_family="sans_bold",  # Default font family
-        color_scheme_seed="#6c99f4",
-        color_scheme=ft.ColorScheme(
-            primary="#6c99f4",  # color displayed most frequently across your app’s screens and components
-            on_primary="#c3ccdf",  # color of elements which are on controls with primary color as background color
-            background="#2c313c",
-            on_background="#1b1e23",
-        ),
-    )
-
-    if dark_mode:
-        page.theme_mode = ft.ThemeMode.DARK
-    else:
-        page.theme_mode = ft.ThemeMode.LIGHT
-
     page.title = APPLICATION_NAME + APPLICATION_SLOGAN
-    page.window.height = 800
-    page.window.width = 1400
-    page.window.min_height = 800
-    page.window.min_width = 1400
+
+    page.theme_mode = "dark" if dark_mode else "light"
+
 
     # page.window.bgcolor = ft.Colors.with_opacity(0, "BLACK")
     # page.bgcolor = ft.Colors.with_opacity(0, "BLACK")
@@ -133,9 +104,7 @@ def main(page: ft.Page):
             app_slogan=APPLICATION_SLOGAN,
             close_method=close_confirm_dialog,
             page=page,
-        ),
-        border_radius=ft.border_radius.only(top_left=25, top_right=25),
-        padding=5,
+        )
     )
 
     # Add UI components to the page

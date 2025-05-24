@@ -23,15 +23,8 @@ def title_bar(app_name: str, app_slogan: str, close_method, page: ft.Page):
         icon=ft.Icons.CLOSE, tooltip="Close", on_click=lambda _: page.window.close()
     )
 
-    app_name_text = ft.Text(
-        app_name,
-        size=20,
-        weight=ft.FontWeight.BOLD,
-        theme_style=ft.TextThemeStyle.HEADLINE_LARGE,
-    )
-
-    app_name_slogan = ft.Text(app_slogan, size=12)
-
+    app_name_text = ft.Text(app_name)
+    app_name_slogan = ft.Text(app_slogan)
     app_name_icon = ft.Icon(name=ft.Icons.HEALTH_AND_SAFETY)
 
     return ft.ResponsiveRow(
@@ -117,16 +110,7 @@ def side_menu(on_item_click):
         content=ft.NavigationRail(
             selected_index=0,
             label_type=ft.NavigationRailLabelType.SELECTED,
-            indicator_shape=ft.StadiumBorder(),
-            elevation=5,
-            group_alignment=-0.2,
-            bgcolor=ft.Colors.with_opacity(0, "BLACK"),
             on_change=on_item_click,
-            # leading=ft.Container(
-            #     content=ft.Column( controls = [ft.Icon(name=ft.Icons.HEALTH_AND_SAFETY, size=80)]),
-            #     alignment=ft.alignment.center,
-            #     expand=True
-            #     ),
             destinations=[
                 ft.NavigationRailDestination(
                     icon=ft.Icon(ft.Icons.SPACE_DASHBOARD), label="Dashboard"
@@ -147,7 +131,8 @@ def side_menu(on_item_click):
                     icon=ft.Icon(ft.Icons.INFO), label="About"
                 ),
             ],
-        )
+        ),
+        height=600
     )
 
 
@@ -165,16 +150,15 @@ def login_dialog(page: ft.Page):
         app_password = "admin"
 
     # Input fields for username and password
-    username_field = ft.TextField(label="Username", value=app_user, width=300)
+    username_field = ft.TextField(label="Username", value=app_user)
     password_field = ft.TextField(
         label="Password",
         value=app_password,
         password=True,
         can_reveal_password=True,
-        width=300,
     )
     remember_me = ft.Checkbox(label="Remember me", value=False)
-    login_message = ft.Text("", color=ft.Colors.RED, width=300)
+    login_message = ft.Text("")
 
     # Handlers for login and close actions
     def login_click(e):
@@ -184,7 +168,6 @@ def login_dialog(page: ft.Page):
         # Example validation logic (replace with your logic)
         if username == app_user and password == app_password:
             login_message.value = "Login successful!"
-            login_message.color = ft.Colors.GREEN
             login_dialog.open = False  # Close the dialog
             # Navigate to the main page or perform further actions
             if remember_me.value:
@@ -192,7 +175,6 @@ def login_dialog(page: ft.Page):
 
         else:
             login_message.value = "Invalid username or password!"
-            login_message.color = ft.Colors.RED
 
         page.update()
 
@@ -243,16 +225,14 @@ def footer():
     return ft.Container(
         content=ft.Row(
             [
-                ft.Text(f"{app_name} © 2025", size=12),
-                ft.Text(" | ", size=12),
-                ft.Text("All rights reserved", size=12),
-                ft.Text(" | ", size=12),
+                ft.Text(f"{app_name} © 2025"),
+                ft.Text(" | "),
+                ft.Text("All rights reserved"),
+                ft.Text(" | "),
                 ft.Text(f"Version {app_ver}"),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
-            spacing=5,
         ),
-        padding=10,
         alignment=ft.alignment.center,
     )
 

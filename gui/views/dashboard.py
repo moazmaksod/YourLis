@@ -7,7 +7,7 @@ def dashboard_view():
     """
     return ft.Column(
         controls=[
-            ft.Text("Welcome to the Dashboard!", size=20, weight=ft.FontWeight.BOLD),
+            ft.Text("Welcome to the Dashboard!"),
             ft.Text("Here is where you can see an overview of your app."),
         ],
         expand=True,
