@@ -28,6 +28,7 @@
     <Content Include="assets\images\reallab.PNG" />
     <Content Include="README.md" />
     <Content Include="requirements.txt" />
+    <Content Include="Sql_reqirement_querys\Reallab\GetPatientCBCResult.sql" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="api\app.py" />
@@ -40,6 +41,7 @@
     <Compile Include="gui\gui_methods.py" />
     <Compile Include="gui\main_flet.py" />
     <Compile Include="gui\views\about.py" />
+    <Compile Include="gui\views\cbc_normal_ranges.py" />
     <Compile Include="gui\views\cbc_report.py" />
     <Compile Include="gui\views\dashboard.py" />
     <Compile Include="gui\views\patient.py" />
@@ -74,6 +76,8 @@
     <Folder Include="log" />
     <Folder Include="server" />
     <Folder Include="setting" />
+    <Folder Include="Sql_reqirement_querys\" />
+    <Folder Include="Sql_reqirement_querys\Reallab\" />
   </ItemGroup>
   <ItemGroup>
     <Interpreter Include="..\lis_env\">
