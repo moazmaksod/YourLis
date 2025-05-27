@@ -43,7 +43,7 @@ async def cbc_report_view(page: ft.Page, patient_id):
         report_view = ft.AlertDialog(
             modal=True,
             scrollable=True,
-            title=ft.Text("Compleate Blood Count"),
+            title=ft.Text("Hematology Report"),
             content=ft.Column([patient_info_view, patient_result_view]),
             actions=[
                 ft.ElevatedButton("Close", on_click=close_report_view),
