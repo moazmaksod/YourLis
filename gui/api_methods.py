@@ -22,6 +22,21 @@ async def fetch_server_status():
         return {"state": "Error", "text": str(e), "clients": {}}
 
 
+async def fetch_communication_messages():
+    """
+    Fetch communication messages from the FastAPI API.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{api_base_url}/server/messages")
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return []
+    except Exception as e:
+        print(f"Error fetching messages: {e}")
+        return []
+
 
 async def toggle_server_state(current_state):
     """

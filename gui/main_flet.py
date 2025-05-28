@@ -82,7 +82,7 @@ def main(page: ft.Page):
             if view_key == "dashboard":
                 cached_views[view_key] = dashboard_view()
             elif view_key == "result":
-                cached_views[view_key] = result_view()
+                cached_views[view_key] = result_view(page)  # Pass the page parameter
             elif view_key == "patient":
                 cached_views[view_key] = patient_view(page)
             elif view_key == "report":
