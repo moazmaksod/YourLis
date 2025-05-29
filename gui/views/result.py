@@ -1,8 +1,7 @@
 ﻿from http import client
+from threading import current_thread
 import flet as ft
 from datetime import datetime
-
-from httpx import Client
 from gui.api_methods import fetch_communication_messages
 import asyncio
 from collections import defaultdict
@@ -127,27 +126,9 @@ class CommunicationView(ft.Column):
         self.page = page
         self.running = True
         self.device_tabs = {}  # Store TabInfo objects
-        self.last_messages = []  # Cache last message set
+        self.message_cutoff_times = {}  # Track cutoff time for messages per device
         self.update_pending = False  # Flag to prevent multiple simultaneous updates
         
-        # Create header
-        self.header = ft.Container(
-            content=ft.Row(
-                controls=[
-                    ft.Icon(name=ft.Icons.CHAT, color=ft.Colors.BLUE),
-                    ft.Text(
-                        "Device-Server Communication",
-                        size=20,
-                        weight=ft.FontWeight.BOLD,
-                        text_align=ft.TextAlign.CENTER,
-                    )
-                ],
-                alignment=ft.MainAxisAlignment.CENTER
-            ),
-            margin=ft.margin.only(bottom=10)
-        )
-        
-      
         
         # Create tabs
         self.tabs = ft.Tabs(
@@ -156,11 +137,8 @@ class CommunicationView(ft.Column):
             expand=True,
         )
         
-
-        
         # Add controls to view
         self.controls = [
-            self.header,
             self.tabs
         ]
         
@@ -171,20 +149,66 @@ class CommunicationView(ft.Column):
     def will_unmount(self):
         """Cleanup when view is unmounted"""
         self.running = False
+        self.device_tabs.clear()
+        self.message_cutoff_times.clear()
+    
+    def close_tab(self, device_address: str):
+        """Close a device tab and clean up its resources"""
+        if device_address in self.device_tabs:
+            tab_info = self.device_tabs[device_address]
+            # Remove tab from view
+            if tab_info.tab in self.tabs.tabs:
+                self.tabs.tabs.remove(tab_info.tab)
+            # Clean up device data
+            del self.device_tabs[device_address]
+            # Set message cutoff time to now for this device
+            self.message_cutoff_times[device_address] = datetime.now()
+            
+            self.update()
+            if len(self.tabs.tabs) > 0:
+                self.tabs.selected_index = 0
     
     def get_device_tab(self, device_name: str, device_address: str) -> TabInfo:
         """Get or create a tab for the specified device"""
 
-
+        # device logo for icon if available
+        device_logo_url = f'assets/logo/{device_name.lower()}.png' if '192.168' not in device_name else 'assets/logo/default_device.png'
+        print(device_logo_url)
+        device_logo = ft.Image(
+            src=device_logo_url,
+            width=32,
+            height=32,
+            border_radius=16,
+            fit=ft.ImageFit.FILL,
+        )
         if device_address not in self.device_tabs:
             # Create new device tab content
             device_tab_content = DeviceTab(device_address)
             
+            new_tab_index = len(self.device_tabs) + 1  # New tab index
+            # Create tab text and close button
+            tab_text = ft.Row(
+                controls=[
+                    ft.Text(f"{new_tab_index} - {device_name}"),
+                    device_logo,
+                    ft.IconButton(
+                        icon=ft.Icons.CLOSE,
+                        icon_size=14,
+                        on_click=lambda e, addr=device_address: self.close_tab(addr),
+                        style=ft.ButtonStyle(
+                            color={"hovered": ft.Colors.RED_400},
+                            padding=5
+                        )
+                    )
+                ],
+                spacing=5,
+                alignment=ft.MainAxisAlignment.CENTER,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
 
             # Create new tab
             tab = ft.Tab(
-                text=f"{ len(self.device_tabs) + 1 } - {device_name}",
-                icon=ft.Icon(name=ft.Icons.DEVICES),
+                tab_content=tab_text,
                 content=device_tab_content
             )
             
@@ -196,36 +220,61 @@ class CommunicationView(ft.Column):
             self.tabs.tabs.append(tab)
             self.update()
         else:
-            # Update existing tab name
+            exist_tab_index = self.tabs.tabs.index(self.device_tabs[device_address].tab)
+            # Update existing tab name if needed
             tab_info = self.device_tabs[device_address]
-            if device_name not in tab_info.tab.text:
-                tab_info.tab.text = f"{device_name}"
+            current_device_name = tab_info.tab.tab_content.controls[0].value
+            new_device_name = f"{exist_tab_index + 1} - {device_name}"
+            if new_device_name != current_device_name:
+                tab_info.tab.tab_content.controls[0].value = new_device_name
                 self.update()
-        
+            # update device logo if needed
+            new_device_logo_url = f'assets/logo/{device_name.lower()}.png' if '192.168' not in device_name else r'assets/logo/default_device.png'
+            print(new_device_logo_url)
+            if new_device_logo_url != tab_info.tab.tab_content.controls[1].src:
+                tab_info.tab.tab_content.controls[1].src = new_device_logo_url
+
+
         return self.device_tabs[device_address]
+    
+    def filter_new_messages(self, messages: list) -> dict:
+        """Filter messages to only include new ones after tab closure"""
+        device_messages = defaultdict(list)
+        
+        for msg in messages:
+            if msg.get("client_address"):
+                client_address = msg["client_address"]
+                msg_timestamp = datetime.fromisoformat(msg["timestamp"])
+                
+                # Check if we have a cutoff time for this device
+                cutoff_time = self.message_cutoff_times.get(client_address)
+                
+                # Include message if:
+                # 1. No cutoff time exists (tab was never closed) OR
+                # 2. Message is newer than the cutoff time
+                if not cutoff_time or msg_timestamp > cutoff_time:
+                    device_messages[client_address].append(msg)
+        
+        return device_messages
     
     def update_device_tabs(self, messages: list):
         """Update all device tabs with their respective messages"""
         try:
             if not messages:
                 return False
-             
 
-            # Group messages by device
-            device_messages = defaultdict(list)
-            for msg in messages:
-                if msg.get("client_address"):  # Only process messages with valid client
-                    device_messages[msg["client_address"]].append(msg)
-
-
+            # Filter and group messages by device
+            device_messages = self.filter_new_messages(messages)
             updated = False
             
             # Update or create device-specific tabs
             for client_address, device_msgs in device_messages.items():
-                device_name = device_msgs[-1]["client_name"]  # Use the last message's client name
-                tab_info = self.get_device_tab(device_name, client_address)
-                if tab_info.content.update_messages(device_msgs):
-                    updated = True
+                if device_msgs:  # Only process if there are new messages
+                    device_name = device_msgs[-1]["client_name"]
+                    tab_info = self.get_device_tab(device_name, client_address)
+                    
+                    if tab_info and tab_info.content.update_messages(device_msgs):
+                        updated = True
 
             return updated
             
@@ -233,31 +282,21 @@ class CommunicationView(ft.Column):
             print(f"Error updating device tabs: {e}")
             return False
     
-    def messages_changed(self, new_messages: list) -> bool:
-        """Check if messages have actually changed"""
-        if len(new_messages) != len(self.last_messages):
-            return True
-            
-        for new_msg, old_msg in zip(new_messages, self.last_messages):
-            if (new_msg.get("timestamp") != old_msg.get("timestamp") or 
-                new_msg.get("message") != old_msg.get("message") or
-                new_msg.get("client_name") != old_msg.get("client_name") or
-                new_msg.get("client_address") != old_msg.get("client_address")):
-                return True
-        return False
-    
     async def update_loop(self):
         """Main update loop for fetching and displaying messages"""
+        last_messages = []  # Keep track of last processed messages
+        
         while self.running:
             try:
                 if not self.update_pending:
                     self.update_pending = True
                     messages = await fetch_communication_messages()
                     
-                    if messages and self.messages_changed(messages):
-                        self.last_messages = messages.copy()
+                    # Only update if messages have changed
+                    if messages != last_messages:
+                        last_messages = messages.copy()
                         if self.update_device_tabs(messages):
-                            self.page.update()  # Regular synchronous update
+                            self.page.update()
                     
                     self.update_pending = False
                     
@@ -265,7 +304,7 @@ class CommunicationView(ft.Column):
                 print(f"Error in update loop: {e}")
                 self.update_pending = False
             
-            await asyncio.sleep(1)  # Check frequently but don't update unless needed
+            await asyncio.sleep(1)
 
 def result_view(page: ft.Page):
     """Create the communication view"""

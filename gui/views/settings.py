@@ -43,28 +43,28 @@ def settings_view(page: ft.Page):
 
     def show_user(e):
         # show hidden password
-        if e.control.icon == ft.icons.REMOVE_RED_EYE_OUTLINED:
+        if e.control.icon == ft.Icons.REMOVE_RED_EYE_OUTLINED:
             # show password value
             database_user.password = False
-            e.control.icon = ft.icons.REMOVE_RED_EYE
+            e.control.icon = ft.Icons.REMOVE_RED_EYE
             page.update()
-        elif e.control.icon == ft.icons.REMOVE_RED_EYE:
+        elif e.control.icon == ft.Icons.REMOVE_RED_EYE:
             # hide password value
             database_user.password = True
-            e.control.icon = ft.icons.REMOVE_RED_EYE_OUTLINED
+            e.control.icon = ft.Icons.REMOVE_RED_EYE_OUTLINED
             page.update()
 
     def show_password(e):
         # show hidden password
-        if e.control.icon == ft.icons.REMOVE_RED_EYE_OUTLINED:
+        if e.control.icon == ft.Icons.REMOVE_RED_EYE_OUTLINED:
             # show password value
             database_password.password = False
-            e.control.icon = ft.icons.REMOVE_RED_EYE
+            e.control.icon = ft.Icons.REMOVE_RED_EYE
             page.update()
-        elif e.control.icon == ft.icons.REMOVE_RED_EYE:
+        elif e.control.icon == ft.Icons.REMOVE_RED_EYE:
             # hide password value
             database_password.password = True
-            e.control.icon = ft.icons.REMOVE_RED_EYE_OUTLINED
+            e.control.icon = ft.Icons.REMOVE_RED_EYE_OUTLINED
             page.update()
 
     def on_text_change(e):

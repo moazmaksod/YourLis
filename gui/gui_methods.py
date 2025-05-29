@@ -56,7 +56,7 @@ class ServerStatusUpdater(ft.Text):
                 device_name = "Unknown Device"
 
             if device_name in SUPPORTED_DEVICES:
-                img_url = SUPPORTED_DEVICES[device_name]["LOGO_URL"]
+                img_url = f'assets/logo/{device_name.lower()}.png'
             else:
                 img_url = "assets/images/default_device.png"  # Default image URL if device name is not supported
 
