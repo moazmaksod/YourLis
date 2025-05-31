@@ -21,11 +21,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Content Include=".gitignore" />
-    <Content Include="assets\icons\password_hide.svg" />
-    <Content Include="assets\icons\password_show.svg" />
-    <Content Include="assets\images\default_device.png" />
-    <Content Include="assets\images\genrui_kt60.jpg" />
-    <Content Include="assets\images\reallab.PNG" />
     <Content Include="README.md" />
     <Content Include="requirements.txt" />
   </ItemGroup>
@@ -65,9 +60,6 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="api" />
-    <Folder Include="assets\" />
-    <Folder Include="assets\icons" />
-    <Folder Include="assets\images" />
     <Folder Include="database" />
     <Folder Include="gui" />
     <Folder Include="gui\views" />

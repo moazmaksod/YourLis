@@ -1,10 +1,10 @@
-﻿from http import client
-from threading import current_thread
-import flet as ft
+﻿import flet as ft
 from datetime import datetime
 from gui.api_methods import fetch_communication_messages
 import asyncio
 from collections import defaultdict
+from log.logger import log_info, log_error
+
 
 class MessageBubble(ft.Container):
     """A chat bubble to display a single message"""
@@ -84,13 +84,15 @@ class DeviceTab(ft.Container):
         super().__init__(expand=True)
         self.device_name = device_name
         self.messages = []  # Store message history
+        self.scroll_position = 0  # Store scroll position
         
-        # Message list with scrolling
+        # Message list with scrolling but without auto_scroll
         self.message_list = ft.ListView(
             expand=True,
             spacing=10,
             padding=20,
-            auto_scroll=True
+            auto_scroll=False,  # Disable auto-scroll to end
+            on_scroll=self.on_list_scroll,  # Track scroll position
         )
         
         # Wrap ListView in a Container for border and padding
@@ -101,6 +103,10 @@ class DeviceTab(ft.Container):
             padding=10
         )
     
+    def on_list_scroll(self, e: ft.ScrollEvent):
+        """Track scroll position of the list"""
+        self.scroll_position = e.pixels
+        
     def update_messages(self, messages: list):
         """Update messages in this tab"""
         # Sort messages by timestamp
@@ -108,8 +114,13 @@ class DeviceTab(ft.Container):
         
         # Check if messages have changed
         if sorted_messages != self.messages:
+            current_scroll = self.scroll_position  # Save current scroll position
+            
             self.messages = sorted_messages.copy()  # Make a copy to prevent reference issues
             self.message_list.controls = [MessageBubble(msg) for msg in sorted_messages]
+            
+            # Restore scroll position after update
+            self.message_list.scroll_to(offset=current_scroll, duration=0)
             return True
         return False
 
@@ -128,13 +139,14 @@ class CommunicationView(ft.Column):
         self.device_tabs = {}  # Store TabInfo objects
         self.message_cutoff_times = {}  # Track cutoff time for messages per device
         self.update_pending = False  # Flag to prevent multiple simultaneous updates
-        
+        self.last_selected_tab = None  # Track the last selected tab
         
         # Create tabs
         self.tabs = ft.Tabs(
             selected_index=0,
             animation_duration=300,
             expand=True,
+            on_change=self.on_tab_change  # Track tab changes
         )
         
         # Add controls to view
@@ -145,6 +157,25 @@ class CommunicationView(ft.Column):
         # Start message updates
         if self.page:
             self.page.run_task(self.update_loop)
+    
+    def on_tab_change(self, e):
+        """Handle tab changes and restore scroll positions"""
+        if self.last_selected_tab is not None and len(self.tabs.tabs) > 0:
+            # Find the newly selected tab
+            new_tab_info = None
+            for device_addr, tab_info in self.device_tabs.items():
+                if tab_info.tab == self.tabs.tabs[self.tabs.selected_index]:
+                    new_tab_info = tab_info
+                    break
+            
+            if new_tab_info:
+                # Restore the scroll position for the newly selected tab
+                new_tab_info.content.message_list.scroll_to(
+                    offset=new_tab_info.content.scroll_position,
+                    duration=0
+                )
+        
+        self.last_selected_tab = self.tabs.selected_index
     
     def will_unmount(self):
         """Cleanup when view is unmounted"""
@@ -173,7 +204,7 @@ class CommunicationView(ft.Column):
 
         # device logo for icon if available
         device_logo_url = f'assets/logo/{device_name.lower()}.png' if '192.168' not in device_name else 'assets/logo/default_device.png'
-        print(device_logo_url)
+
         device_logo = ft.Image(
             src=device_logo_url,
             width=32,
@@ -230,7 +261,7 @@ class CommunicationView(ft.Column):
                 self.update()
             # update device logo if needed
             new_device_logo_url = f'assets/logo/{device_name.lower()}.png' if '192.168' not in device_name else r'assets/logo/default_device.png'
-            print(new_device_logo_url)
+
             if new_device_logo_url != tab_info.tab.tab_content.controls[1].src:
                 tab_info.tab.tab_content.controls[1].src = new_device_logo_url
 
@@ -279,7 +310,7 @@ class CommunicationView(ft.Column):
             return updated
             
         except Exception as e:
-            print(f"Error updating device tabs: {e}")
+            log_error(f"Error updating device tabs: {e}")
             return False
     
     async def update_loop(self):
@@ -301,7 +332,7 @@ class CommunicationView(ft.Column):
                     self.update_pending = False
                     
             except Exception as e:
-                print(f"Error in update loop: {e}")
+                log_error(f"Error in update loop: {e}")
                 self.update_pending = False
             
             await asyncio.sleep(1)
