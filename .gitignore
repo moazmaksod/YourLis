@@ -33,6 +33,8 @@ var/
 debug.log
 pip-log.txt
 pip-delete-this-directory.txt
+logs/*
+!logs/.gitkeep
 
 # Unit test / coverage reports
 htmlcov/
