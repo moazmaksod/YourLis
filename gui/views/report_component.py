@@ -158,7 +158,7 @@ class ReportPatientResult(ft.Container):
 											size=s["size"]),
 									ft.Text(unit,
 											size=s["size"],
-											color=ft.Colors.GREY)
+											color=ft.colors.GREY_600) # Adjusted color
 									],
 									),
 						),

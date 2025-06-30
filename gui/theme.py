@@ -1,0 +1,90 @@
+import flet as ft
+
+# Define font paths (assuming they are in assets/fonts/sans/)
+JOSEFIN_SANS_REGULAR_PATH = "/fonts/sans/JosefinSans-Regular.ttf"
+JOSEFIN_SANS_BOLD_PATH = "/fonts/sans/JosefinSans-Bold.ttf"
+JOSEFIN_SANS_LIGHT_PATH = "/fonts/sans/JosefinSans-Light.ttf"
+
+# Define font family name
+FONT_FAMILY_JOSEFIN_SANS = "Josefin Sans"
+
+# Common page transitions
+common_page_transitions = ft.PageTransitionsTheme(
+    android=ft.PageTransitionTheme.OPEN_UPWARDS,
+    ios=ft.PageTransitionTheme.CUPERTINO,
+    macos=ft.PageTransitionTheme.ZOOM,
+    linux=ft.PageTransitionTheme.ZOOM,
+    windows=ft.PageTransitionTheme.ZOOM,
+)
+
+# Define TextTheme for consistent typography (optional, can be expanded)
+common_text_theme = ft.TextTheme(
+    headline_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=24), # For About page title
+    headline_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20), # For Report page title
+    headline_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=18), # For Settings sections
+    title_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20),    # General purpose large title
+    title_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=16),  # General purpose medium title
+    title_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.SEMI_BOLD, size=14),# General purpose small title
+    body_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=16),  # For About page body text
+    body_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=14), # Default body
+    label_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=12), # For less important labels
+)
+
+# Light Theme
+light_theme = ft.Theme(
+    color_scheme_seed=ft.colors.BLUE_GREY,  # A neutral base color
+    font_family=FONT_FAMILY_JOSEFIN_SANS,
+    page_transitions=common_page_transitions,
+    text_theme=common_text_theme,
+    use_material3=True,
+    # Example of more detailed color scheme if needed:
+    # color_scheme=ft.ColorScheme(
+    #     primary=ft.colors.BLUE_600,
+    #     primary_container=ft.colors.BLUE_100,
+    #     secondary=ft.colors.PINK_600,
+    #     # ... other colors
+    # ),
+    # visual_density=ft.ThemeVisualDensity.COMFORTABLE,
+)
+
+# Dark Theme
+dark_theme = ft.Theme(
+    color_scheme_seed=ft.colors.BLUE_GREY, # Using the same seed can generate a harmonious dark variant
+    font_family=FONT_FAMILY_JOSEFIN_SANS,
+    page_transitions=common_page_transitions,
+    text_theme=common_text_theme,
+    use_material3=True,
+    # Example of more detailed color scheme for dark theme:
+    # color_scheme=ft.ColorScheme(
+    #     brightness=ft.Brightness.DARK,
+    #     primary=ft.colors.BLUE_300,
+    #     primary_container=ft.colors.BLUE_800,
+    #     secondary=ft.colors.PINK_300,
+    #     # ... other colors
+    # ),
+    # visual_density=ft.ThemeVisualDensity.COMFORTABLE,
+)
+
+def get_app_themes() -> tuple[ft.Theme, ft.Theme]:
+    """Returns the light and dark themes for the application."""
+    return light_theme, dark_theme
+
+# To be used in main_flet.py for page.fonts
+app_fonts = {
+    FONT_FAMILY_JOSEFIN_SANS: JOSEFIN_SANS_REGULAR_PATH,
+    f"{FONT_FAMILY_JOSEFIN_SANS} Bold": JOSEFIN_SANS_BOLD_PATH,
+    f"{FONT_FAMILY_JOSEFIN_SANS} Light": JOSEFIN_SANS_LIGHT_PATH,
+    # Flet might not distinguish font weights by appending "Bold" to the family name this way.
+    # It's often better to specify weight in TextStyle.
+    # However, providing the bold font file is good if Flet can pick it up for bold text.
+    # For more robust font weight handling, rely on TextTheme and TextStyle(weight=...).
+}
+
+# Ensure Flet uses Material 3 design system
+ft.theme = ft.Theme(use_material3=True)
+
+if __name__ == "__main__":
+    # Example of how to print theme details (for debugging)
+    print("Light Theme Color Scheme:", light_theme.color_scheme)
+    print("Dark Theme Color Scheme:", dark_theme.color_scheme)
+    print("App Fonts:", app_fonts)

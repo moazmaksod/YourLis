@@ -179,12 +179,14 @@ def set_flag(value,normal_range):
     :return: A string flag ("High", "Low", or "Normal").
     """
 
+import flet as ft # Added import for ft.colors
+
     if not normal_range:
         return "Unknown"  # Return "Unknown" if no range is defined
 
-    FLAG_LOW_COL = "yellow700"
-    FLAG_HIGH_COL = "red700"
-    Flag_NORMAL_COL = "green700"
+    FLAG_LOW_COL = ft.colors.YELLOW_700
+    FLAG_HIGH_COL = ft.colors.RED_700
+    Flag_NORMAL_COL = ft.colors.GREEN_700
 
     min_value, max_value = normal_range
 

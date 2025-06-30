@@ -116,7 +116,7 @@ def settings_view(page: ft.Page):
     application_settings = ft.Container(
         ft.Column(
             [
-                ft.Text("Application Settings", size=18, weight=ft.FontWeight.BOLD),
+                ft.Text("Application Settings", style=ft.TextThemeStyle.HEADLINE_SMALL),
                 ft.Text("Configure the application's appearance and behavior."),
                 ft.Divider(opacity=0),
                 ft.Row(controls=[config_url, dark_mode]),
@@ -127,7 +127,7 @@ def settings_view(page: ft.Page):
     server_settings = ft.Container(
         ft.Column(
             [
-                ft.Text("Server Settings", size=18, weight=ft.FontWeight.BOLD),
+                ft.Text("Server Settings", style=ft.TextThemeStyle.HEADLINE_SMALL),
                 ft.Text("Configure the server's network settings."),
                 ft.Divider(opacity=0),
                 ft.Row(controls=[server_host, server_port]),
@@ -138,7 +138,7 @@ def settings_view(page: ft.Page):
     database_settings = ft.Container(
         ft.Column(
             [
-                ft.Text("Database Settings", size=18, weight=ft.FontWeight.BOLD),
+                ft.Text("Database Settings", style=ft.TextThemeStyle.HEADLINE_SMALL),
                 ft.Text("Configure the database's connection settings."),
                 ft.Divider(opacity=0),
                 ft.Row(
