@@ -5,48 +5,48 @@ import flet as ft
 # This is the new single source of truth for core application colors.
 APP_COLORS = {
     "text_default": { # For primary body text, titles, headlines
-        "light": ft.colors.BLACK87, # Slightly off-black for better aesthetics
-        "dark": ft.colors.WHITE,
+        "light": ft.Colors.BLACK87, # Slightly off-black for better aesthetics
+        "dark": ft.Colors.WHITE,
     },
     "text_muted": { # For secondary text, hints, disabled text (can be adjusted)
-        "light": ft.colors.with_opacity(0.65, ft.colors.BLACK),
-        "dark": ft.colors.with_opacity(0.70, ft.colors.WHITE),
+        "light": ft.Colors.with_opacity(0.65, ft.Colors.BLACK),
+        "dark": ft.Colors.with_opacity(0.70, ft.Colors.WHITE),
     },
     "surface_background": { # Main background for pages and larger surfaces
-        "light": ft.colors.WHITE,
-        "dark": ft.colors.BLACK, # A common very dark background
+        "light": ft.Colors.WHITE,
+        "dark": ft.Colors.BLACK, # A common very dark background
     },
     "dialog_background": { # Background for dialogs
-        "light": ft.colors.WHITE,
-        "dark": ft.colors.with_opacity(0.15, ft.colors.WHITE), # Common dark dialog bg
+        "light": ft.Colors.WHITE,
+        "dark": ft.Colors.with_opacity(0.15, ft.Colors.WHITE), # Common dark dialog bg
     },
     "card_background": { # Background for cards or distinct sections
-        "light": ft.colors.SURFACE_VARIANT, # Material 3 concept for slightly off-main bg
-        "dark": ft.colors.with_opacity(0.08, ft.colors.WHITE), # Darker card
+        "light": ft.Colors.SURFACE_CONTAINER_HIGHEST, # Material 3 concept for slightly off-main bg
+        "dark": ft.Colors.with_opacity(0.08, ft.Colors.WHITE), # Darker card
     },
     "accent_primary": { # Main interactive color (e.g., buttons, active indicators)
-        "light": ft.colors.BLUE_600,
-        "dark": ft.colors.BLUE_300,
+        "light": ft.Colors.BLUE_600,
+        "dark": ft.Colors.BLUE_300,
     },
     "accent_secondary": { # Secondary interactive color
-        "light": ft.colors.PINK_600,
-        "dark": ft.colors.PINK_300,
+        "light": ft.Colors.PINK_600,
+        "dark": ft.Colors.PINK_300,
     },
     "error_color": {
-        "light": ft.colors.RED_700,
-        "dark": ft.colors.RED_400,
+        "light": ft.Colors.RED_700,
+        "dark": ft.Colors.RED_400,
     },
     "success_color": {
-        "light": ft.colors.GREEN_700,
-        "dark": ft.colors.GREEN_400,
+        "light": ft.Colors.GREEN_700,
+        "dark": ft.Colors.GREEN_400,
     },
     "warning_color": {
-        "light": ft.colors.AMBER_700,
-        "dark": ft.colors.AMBER_400,
+        "light": ft.Colors.AMBER_700,
+        "dark": ft.Colors.AMBER_400,
     },
     "border_outline_color": { # For borders, dividers
-        "light": ft.colors.GREY_300,
-        "dark": ft.colors.GREY_700,
+        "light": ft.Colors.GREY_300,
+        "dark": ft.Colors.GREY_700,
     },
 }
 
@@ -102,7 +102,7 @@ light_theme = ft.Theme(
         # Add other mappings here as needed, e.g.,
         # primary_container, on_primary, on_secondary, etc.
     ),
-    # color_scheme_seed=ft.colors.BLUE_GREY, # Consider removing if ColorScheme is fully defined
+    # color_scheme_seed=ft.Colors.BLUE_GREY, # Consider removing if ColorScheme is fully defined
     font_family=FONT_FAMILY_JOSEFIN_SANS,
     page_transitions=common_page_transitions,
     text_theme=light_text_theme,
@@ -119,7 +119,7 @@ dark_theme = ft.Theme(
         error=APP_COLORS["error_color"]["dark"],
         # Add other mappings here
     ),
-    # color_scheme_seed=ft.colors.BLUE_GREY, # Consider removing
+    # color_scheme_seed=ft.Colors.BLUE_GREY, # Consider removing
     font_family=FONT_FAMILY_JOSEFIN_SANS,
     page_transitions=common_page_transitions,
     text_theme=dark_text_theme,
