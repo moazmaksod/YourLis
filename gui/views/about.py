@@ -21,7 +21,7 @@ def about_view():
                 text_align=ft.TextAlign.JUSTIFY,
             ),
 
-            ft.Divider(height=20, thickness=2, color=ft.colors.GREY_300), # Theme-neutral divider
+            ft.Divider(height=20, thickness=2, color=ft.Colorss.GREY_300), # Theme-neutral divider
 
             ft.Text("Supported Applications", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
             ft.Row(
@@ -34,7 +34,7 @@ def about_view():
                 expand=True
             ),
 
-            ft.Divider(height=20, thickness=2, color=ft.colors.GREY_300), # Theme-neutral divider
+            ft.Divider(height=20, thickness=2, color=ft.Colorss.GREY_300), # Theme-neutral divider
 
             ft.Text("Supported Devices", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
 

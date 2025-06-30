@@ -34,7 +34,7 @@ class PaginatedDataTable(ft.DataTable):
             rows=[],
             expand=True,
             width=2000,
-            # vertical_lines=ft.BorderSide(width=0.5, color=ft.Colors.WHITE),
+            # vertical_lines=ft.BorderSide(width=0.5, color=ft.Colorss.WHITE),
             divider_thickness=0.5,
         )
         self.page = page
