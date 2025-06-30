@@ -1,3 +1,5 @@
+import flet as ft # Moved import to the top of the file
+
 # Dictionary for normal ranges of CBC parameters based on age
 # The ranges are hypothetical and should be replaced with actual clinical data
 NORMAL_RANGES = {
@@ -179,7 +181,7 @@ def set_flag(value,normal_range):
     :return: A string flag ("High", "Low", or "Normal").
     """
 
-import flet as ft # Added import for ft.colors
+    # import flet as ft # This line was removed, import is now at the top
 
     if not normal_range:
         return "Unknown"  # Return "Unknown" if no range is defined
