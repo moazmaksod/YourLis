@@ -19,14 +19,14 @@ class MessageBubble(ft.Container):
         
         # Set colors based on message type
         if is_info:
-            client_color = ft.Colors.GREY_700
-            bg_color = ft.Colors.GREY_200
+            client_color = ft.colors.GREY_700
+            bg_color = ft.colors.GREY_200
         elif is_error:
-            client_color = ft.Colors.RED_600
-            bg_color = ft.Colors.RED_100 # Brighter for error background
+            client_color = ft.colors.RED_600
+            bg_color = ft.colors.RED_100 # Brighter for error background
         else: # Server or Client
-            client_color = ft.Colors.BLUE_600 if is_server else ft.Colors.GREEN_600
-            bg_color = ft.Colors.BLUE_50 if is_server else ft.Colors.GREEN_50
+            client_color = ft.colors.BLUE_600 if is_server else ft.colors.GREEN_600
+            bg_color = ft.colors.BLUE_50 if is_server else ft.colors.GREEN_50
         
         # Create message content with HL7 formatting
         message_text = ft.Container(
@@ -57,7 +57,7 @@ class MessageBubble(ft.Container):
                 ft.Text(
                     self.timestamp.strftime("%H:%M:%S"),
                     size=10, # Keep specific size
-                    color=ft.Colors.GREY_600,  # Adjusted grey
+                    color=ft.colors.GREY_600,  # Adjusted grey
                     selectable=True
                 ),
             ],
@@ -96,7 +96,7 @@ class DeviceTab(ft.Container):
         self.content = ft.Container(
             content=self.message_list,
             expand=True,
-            border=ft.border.all(1, ft.Colors.GREY_400), # Adjusted border color
+            border=ft.border.all(1, ft.colors.GREY_400), # Adjusted border color
             padding=10
         )
     
@@ -224,7 +224,7 @@ class CommunicationView(ft.Column):
                         icon_size=14,
                         on_click=lambda e, addr=device_address: self.close_tab(addr),
                         style=ft.ButtonStyle(
-                            color={"hovered": ft.Colors.RED_700}, # Adjusted hover color
+                            color={"hovered": ft.colors.RED_700}, # Adjusted hover color
                             padding=5
                         )
                     )
