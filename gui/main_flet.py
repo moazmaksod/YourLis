@@ -36,8 +36,8 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.DARK if dark_mode else ft.ThemeMode.LIGHT
 
 
-    # page.window.bgcolor = ft.Colorss.with_opacity(0, "BLACK")
-    # page.bgcolor = ft.Colorss.with_opacity(0, "BLACK")
+    # page.window.bgcolor = ft.Colors.with_opacity(0, "BLACK")
+    # page.bgcolor = ft.Colors.with_opacity(0, "BLACK")
     # page.window.title_bar_hidden = True
     # page.window.title_bar_buttons_hidden = True
     # page.window.frameless = True

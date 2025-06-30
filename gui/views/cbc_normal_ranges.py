@@ -186,9 +186,9 @@ def set_flag(value,normal_range):
     if not normal_range:
         return "Unknown"  # Return "Unknown" if no range is defined
 
-    FLAG_LOW_COL = ft.Colorss.YELLOW_700
-    FLAG_HIGH_COL = ft.Colorss.RED_700
-    Flag_NORMAL_COL = ft.Colorss.GREEN_700
+    FLAG_LOW_COL = ft.Colors.YELLOW_700
+    FLAG_HIGH_COL = ft.Colors.RED_700
+    Flag_NORMAL_COL = ft.Colors.GREEN_700
 
     min_value, max_value = normal_range
 
