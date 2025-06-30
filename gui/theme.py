@@ -17,7 +17,7 @@ common_page_transitions = ft.PageTransitionsTheme(
 )
 
 # --- Light Text Theme ---
-light_text_color = ft.colors.BLACK
+light_text_color = ft.Colors.BLACK
 light_text_theme = ft.TextTheme(
     headline_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=24, color=light_text_color),
     headline_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=light_text_color),
@@ -31,7 +31,7 @@ light_text_theme = ft.TextTheme(
 )
 
 # --- Dark Text Theme ---
-dark_text_color = ft.colors.WHITE
+dark_text_color = ft.Colors.WHITE
 dark_text_theme = ft.TextTheme(
     headline_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=24, color=dark_text_color),
     headline_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=dark_text_color),
@@ -49,7 +49,7 @@ light_theme = ft.Theme(
     color_scheme=ft.ColorScheme(
         on_surface=light_text_color, # Still useful for other elements that might use on_surface
     ),
-    color_scheme_seed=ft.colors.BLUE_GREY,
+    color_scheme_seed=ft.Colors.BLUE_GREY,
     font_family=FONT_FAMILY_JOSEFIN_SANS, # Default font family for controls not using TextTheme
     page_transitions=common_page_transitions,
     text_theme=light_text_theme, # Assign specific light text theme
@@ -61,7 +61,7 @@ dark_theme = ft.Theme(
     color_scheme=ft.ColorScheme(
         on_surface=dark_text_color, # Still useful
     ),
-    color_scheme_seed=ft.colors.BLUE_GREY,
+    color_scheme_seed=ft.Colors.BLUE_GREY,
     font_family=FONT_FAMILY_JOSEFIN_SANS, # Default font family
     page_transitions=common_page_transitions,
     text_theme=dark_text_theme, # Assign specific dark text theme
