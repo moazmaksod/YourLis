@@ -1,7 +1,8 @@
 import flet as ft
 
 # --- Centralized Color Palette (Dark Mode Focused as per User Spec) ---
-# Using ft.Color("hex_code") for specified colors, and ft.Color.WHITE/BLACK for pure white/black.
+# Using ft.Color("hex_code") for specified colors, and ft.Color.WHITE/BLACK for pure white/black,
+# and ft.Color.CONSTANT_NAME for other Flet predefined color constants.
 APP_COLORS_DARK = {
     "primary_background": ft.Color("#1A1A1A"),      # Deep charcoal black
     "secondary_background": ft.Color("#2C2C2C"),    # Slightly lighter, warm dark grey (for cards)
@@ -17,30 +18,26 @@ APP_COLORS_DARK = {
 
     "divider_border": ft.Color("#444444"),          # Subtle light grey for borders/dividers
 
-    # Gradient colors - these are harder to use directly in simple ColorScheme/TextStyle
-    # but can be stored here for reference or used by custom components.
     "gradient_blue_teal_start": ft.Color("#00CED1"), # Dark Turquoise
     "gradient_blue_teal_end": ft.Color("#1ABC9C"),   # Turquoise
     "gradient_blue_purple_start": ft.Color("#3498DB"),# Medium Blue
     "gradient_blue_purple_end": ft.Color("#8E44AD"),  # Soft Purple
 }
 
-# (A basic light theme counterpart can be defined later if needed)
-# For now, we can make a placeholder light theme or derive it simply.
 APP_COLORS_LIGHT = {
     "primary_background": ft.Color.WHITE,
-    "secondary_background": ft.Color.GREY_200, # Example
-    "sidebar_background": ft.Color.GREY_100,  # Example
+    "secondary_background": ft.Color.GREY_200,
+    "sidebar_background": ft.Color.GREY_100,
 
-    "accent_blue": ft.Color.BLUE_600,       # Example
-    "accent_yellow": ft.Color.YELLOW_700,   # Example
-    "accent_red": ft.Color.RED_600,         # Example
-    "accent_green": ft.Color.GREEN_600,     # Example
+    "accent_blue": ft.Color.BLUE_600,
+    "accent_yellow": ft.Color.YELLOW_700,
+    "accent_red": ft.Color.RED_600,
+    "accent_green": ft.Color.GREEN_600,
 
     "text_primary": ft.Color.BLACK87,
     "text_secondary": ft.Color.BLACK45,
 
-    "divider_border": ft.Color.GREY_400,    # Example
+    "divider_border": ft.Color.GREY_400,
 }
 
 
@@ -88,52 +85,27 @@ light_text_theme = ft.TextTheme(
 # --- Dark Theme ---
 dark_theme = ft.Theme(
     color_scheme=ft.ColorScheme(
-        # Primary surface colors
         surface=APP_COLORS_DARK["primary_background"],
         on_surface=APP_COLORS_DARK["text_primary"],
-        # Background is often the same as surface for main content area
         background=APP_COLORS_DARK["primary_background"],
         on_background=APP_COLORS_DARK["text_primary"],
-
-        # Primary accent color (used for main interactive elements like buttons)
         primary=APP_COLORS_DARK["accent_blue"],
-        on_primary=ft.Color.WHITE, # Text/icons on primary background
-
-        # Secondary accent color (for other interactive elements)
-        secondary=APP_COLORS_DARK["accent_green"], # Example: using green as secondary
-        on_secondary=ft.Color.WHITE, # Text/icons on secondary background
-
-        # Error color
+        on_primary=ft.Color.WHITE,
+        secondary=APP_COLORS_DARK["accent_green"],
+        on_secondary=ft.Color.WHITE,
         error=APP_COLORS_DARK["accent_red"],
-        on_error=ft.Color.WHITE, # Text/icons on error background
-
-        # For cards or sections that stand out slightly from the main surface
+        on_error=ft.Color.WHITE,
         surface_variant=APP_COLORS_DARK["secondary_background"],
         on_surface_variant=APP_COLORS_DARK["text_secondary"],
-
         outline=APP_COLORS_DARK["divider_border"],
     ),
     font_family=FONT_FAMILY_JOSEFIN_SANS,
     page_transitions=common_page_transitions,
     text_theme=dark_text_theme,
     use_material3=True,
-    # Example for specific component themes (can be expanded)
-    # elevated_button_theme=ft.ElevatedButtonThemeData(
-    #     style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10))
-    # ),
-    # text_button_theme=ft.TextButtonThemeData(
-    #     style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10))
-    # ),
-    # navigation_rail_theme=ft.NavigationRailThemeData(
-    #    selected_icon_theme=ft.IconThemeData(color=APP_COLORS_DARK["accent_blue"]),
-    #    unselected_icon_theme=ft.IconThemeData(color=APP_COLORS_DARK["text_secondary"]),
-    #    selected_label_text_style=ft.TextStyle(color=APP_COLORS_DARK["accent_blue"]),
-    #    unselected_label_text_style=ft.TextStyle(color=APP_COLORS_DARK["text_secondary"]),
-    #    # indicator_color=APP_COLORS_DARK["accent_blue"], # For the selection indicator
-    # )
 )
 
-# --- Light Theme (basic placeholder, can be detailed later) ---
+# --- Light Theme ---
 light_theme = ft.Theme(
     color_scheme=ft.ColorScheme(
         surface=APP_COLORS_LIGHT["primary_background"],
@@ -156,7 +128,6 @@ light_theme = ft.Theme(
     use_material3=True,
 )
 
-
 def get_app_themes() -> tuple[ft.Theme, ft.Theme]:
     """Returns the light and dark themes for the application."""
     return light_theme, dark_theme
@@ -167,8 +138,28 @@ app_fonts = {
     f"{FONT_FAMILY_JOSEFIN_SANS} Light": JOSEFIN_SANS_LIGHT_PATH,
 }
 
+# This global ft.theme might not be necessary if page.theme and page.dark_theme are always set.
+# It acts as a fallback. It should also use Material 3 if other themes do.
 ft.theme = ft.Theme(use_material3=True)
 
 if __name__ == "__main__":
-    pass # Add debug prints here if needed
+    # This block is for direct execution testing of this file, which is unlikely in a Flet app.
+    # If you were to run `python gui/theme.py`, these prints would execute.
+    # For Flet app context, these won't run unless explicitly called.
+    print("--- Dark Theme Debug Info ---")
+    print(f"Primary Background (surface): {dark_theme.color_scheme.surface}") #type: ignore
+    print(f"Primary Text (on_surface): {dark_theme.color_scheme.on_surface}") #type: ignore
+    print(f"Card Background (surface_variant): {dark_theme.color_scheme.surface_variant}") #type: ignore
+    print(f"Card Text (on_surface_variant): {dark_theme.color_scheme.on_surface_variant}") #type: ignore
+    print(f"Accent Blue (primary): {dark_theme.color_scheme.primary}") #type: ignore
+    print(f"Text on Accent Blue (on_primary): {dark_theme.color_scheme.on_primary}") #type: ignore
+    print(f"Sidebar Background (intended): {APP_COLORS_DARK['sidebar_background']}")
+    print(f"Divider/Border (outline): {dark_theme.color_scheme.outline}") #type: ignore
+    print(f"Text Theme Body Medium Color: {dark_theme.text_theme.body_medium.color}") #type: ignore
+
+    print("\n--- Light Theme Debug Info ---")
+    print(f"Primary Background (surface): {light_theme.color_scheme.surface}") #type: ignore
+    print(f"Primary Text (on_surface): {light_theme.color_scheme.on_surface}") #type: ignore
+    print(f"Text Theme Body Medium Color: {light_theme.text_theme.body_medium.color}") #type: ignore
+
 ```
