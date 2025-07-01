@@ -20,13 +20,13 @@ class MessageBubble(ft.Container):
         # Set colors based on message type
         if is_info:
             client_color = ft.Colors.GREY_700
-            bg_color = ft.Colors.GREY_200
+            #bg_color = ft.Colors.GREY_200
         elif is_error:
             client_color = ft.Colors.RED_600
-            bg_color = ft.Colors.RED_100 # Brighter for error background
+            #bg_color = ft.Colors.RED_100 # Brighter for error background
         else: # Server or Client
             client_color = ft.Colors.BLUE_600 if is_server else ft.Colors.GREEN_600
-            bg_color = ft.Colors.BLUE_50 if is_server else ft.Colors.GREEN_50
+            #bg_color = ft.Colors.BLUE_50 if is_server else ft.Colors.GREEN_50
         
         # Create message content with HL7 formatting
         message_text = ft.Container(
@@ -39,7 +39,7 @@ class MessageBubble(ft.Container):
                 weight=ft.FontWeight.NORMAL, # Keep specific weight
                 # color attribute removed to inherit from theme
             ),
-            bgcolor=bg_color, # Apply background to container
+            #bgcolor=bg_color, # Apply background to container
             padding=10,
             width=350  # Fixed width for better readability
         )
