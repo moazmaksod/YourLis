@@ -1,54 +1,48 @@
 import flet as ft
 
-# --- Centralized Color Palette ---
-# Define semantic names and their light/dark Flet color values.
-# This is the new single source of truth for core application colors.
-APP_COLORS = {
-    "text_default": { # For primary body text, titles, headlines
-        "light": ft.Colors.BLACK87, # Slightly off-black for better aesthetics
-        "dark": ft.Colors.WHITE,
-    },
-    "text_muted": { # For secondary text, hints, disabled text (can be adjusted)
-        "light": ft.Colors.with_opacity(0.65, ft.Colors.BLACK),
-        "dark": ft.Colors.with_opacity(0.70, ft.Colors.WHITE),
-    },
-    "surface_background": { # Main background for pages and larger surfaces
-        "light": ft.Colors.WHITE,
-        "dark": ft.Colors.BLACK, # A common very dark background
-    },
-    "dialog_background": { # Background for dialogs
-        "light": ft.Colors.WHITE,
-        "dark": ft.Colors.with_opacity(0.15, ft.Colors.WHITE), # Common dark dialog bg
-    },
-    "card_background": { # Background for cards or distinct sections
-        "light": ft.Colors.SURFACE_CONTAINER_HIGHEST, # Material 3 concept for slightly off-main bg
-        "dark": ft.Colors.with_opacity(0.08, ft.Colors.WHITE), # Darker card
-    },
-    "accent_primary": { # Main interactive color (e.g., buttons, active indicators)
-        "light": ft.Colors.BLUE_600,
-        "dark": ft.Colors.BLUE_300,
-    },
-    "accent_secondary": { # Secondary interactive color
-        "light": ft.Colors.PINK_600,
-        "dark": ft.Colors.PINK_300,
-    },
-    "error_color": {
-        "light": ft.Colors.RED_700,
-        "dark": ft.Colors.RED_400,
-    },
-    "success_color": {
-        "light": ft.Colors.GREEN_700,
-        "dark": ft.Colors.GREEN_400,
-    },
-    "warning_color": {
-        "light": ft.Colors.AMBER_700,
-        "dark": ft.Colors.AMBER_400,
-    },
-    "border_outline_color": { # For borders, dividers
-        "light": ft.Colors.GREY_300,
-        "dark": ft.Colors.GREY_700,
-    },
+# --- Centralized Color Palette (Dark Mode Focused as per User Spec) ---
+# Using ft.Color("hex_code") for specified colors, and ft.Color.WHITE/BLACK for pure white/black.
+APP_COLORS_DARK = {
+    "primary_background": ft.Color("#1A1A1A"),      # Deep charcoal black
+    "secondary_background": ft.Color("#2C2C2C"),    # Slightly lighter, warm dark grey (for cards)
+    "sidebar_background": ft.Color("#222222"),      # Darker grey for sidebar
+
+    "accent_blue": ft.Color("#3498DB"),             # Vibrant blue
+    "accent_yellow": ft.Color("#F39C12"),           # Bright, orangey yellow
+    "accent_red": ft.Color("#E74C3C"),               # Strong, clear red
+    "accent_green": ft.Color("#2ECC71"),             # Fresh, medium-dark green
+
+    "text_primary": ft.Color.WHITE,                 # Pure white for prominent titles
+    "text_secondary": ft.Color("#CCCCCC"),          # Light grey for less prominent text (can also use #B0B0B0)
+
+    "divider_border": ft.Color("#444444"),          # Subtle light grey for borders/dividers
+
+    # Gradient colors - these are harder to use directly in simple ColorScheme/TextStyle
+    # but can be stored here for reference or used by custom components.
+    "gradient_blue_teal_start": ft.Color("#00CED1"), # Dark Turquoise
+    "gradient_blue_teal_end": ft.Color("#1ABC9C"),   # Turquoise
+    "gradient_blue_purple_start": ft.Color("#3498DB"),# Medium Blue
+    "gradient_blue_purple_end": ft.Color("#8E44AD"),  # Soft Purple
 }
+
+# (A basic light theme counterpart can be defined later if needed)
+# For now, we can make a placeholder light theme or derive it simply.
+APP_COLORS_LIGHT = {
+    "primary_background": ft.Color.WHITE,
+    "secondary_background": ft.Color.GREY_200, # Example
+    "sidebar_background": ft.Color.GREY_100,  # Example
+
+    "accent_blue": ft.Color.BLUE_600,       # Example
+    "accent_yellow": ft.Color.YELLOW_700,   # Example
+    "accent_red": ft.Color.RED_600,         # Example
+    "accent_green": ft.Color.GREEN_600,     # Example
+
+    "text_primary": ft.Color.BLACK87,
+    "text_secondary": ft.Color.BLACK45,
+
+    "divider_border": ft.Color.GREY_400,    # Example
+}
+
 
 # Font definitions
 JOSEFIN_SANS_REGULAR_PATH = "/fonts/sans/JosefinSans-Regular.ttf"
@@ -65,66 +59,103 @@ common_page_transitions = ft.PageTransitionsTheme(
     windows=ft.PageTransitionTheme.ZOOM,
 )
 
-# --- Light Text Theme (using centralized palette) ---
-light_text_theme = ft.TextTheme(
-    headline_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=24, color=APP_COLORS["text_default"]["light"]),
-    headline_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=APP_COLORS["text_default"]["light"]),
-    headline_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=18, color=APP_COLORS["text_default"]["light"]),
-    title_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=APP_COLORS["text_default"]["light"]),
-    title_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=16, color=APP_COLORS["text_default"]["light"]),
-    title_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.W_600, size=14, color=APP_COLORS["text_default"]["light"]),
-    body_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=16, color=APP_COLORS["text_default"]["light"]),
-    body_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=14, color=APP_COLORS["text_default"]["light"]), # Default body text
-    label_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=12, color=APP_COLORS["text_muted"]["light"]), # Muted for labels
-)
-
-# --- Dark Text Theme (using centralized palette) ---
+# --- Dark Text Theme (using new palette) ---
 dark_text_theme = ft.TextTheme(
-    headline_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=24, color=APP_COLORS["text_default"]["dark"]),
-    headline_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=APP_COLORS["text_default"]["dark"]),
-    headline_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=18, color=APP_COLORS["text_default"]["dark"]),
-    title_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=APP_COLORS["text_default"]["dark"]),
-    title_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=16, color=APP_COLORS["text_default"]["dark"]),
-    title_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.W_600, size=14, color=APP_COLORS["text_default"]["dark"]),
-    body_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=16, color=APP_COLORS["text_default"]["dark"]),
-    body_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=14, color=APP_COLORS["text_default"]["dark"]), # Default body text
-    label_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=12, color=APP_COLORS["text_muted"]["dark"]), # Muted for labels
+    headline_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=24, color=APP_COLORS_DARK["text_primary"]),
+    headline_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=APP_COLORS_DARK["text_primary"]),
+    headline_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=18, color=APP_COLORS_DARK["text_primary"]),
+    title_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=APP_COLORS_DARK["text_primary"]),
+    title_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=16, color=APP_COLORS_DARK["text_primary"]),
+    title_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.W_600, size=14, color=APP_COLORS_DARK["text_primary"]),
+    body_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=16, color=APP_COLORS_DARK["text_primary"]),
+    body_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=14, color=APP_COLORS_DARK["text_primary"]),
+    label_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=12, color=APP_COLORS_DARK["text_secondary"]),
 )
 
-# --- Light Theme (Color Scheme to be updated next) ---
-light_theme = ft.Theme(
-    color_scheme=ft.ColorScheme( # Will be updated to use APP_COLORS
-        on_surface=APP_COLORS["text_default"]["light"],
-        surface=APP_COLORS["surface_background"]["light"],
-        primary=APP_COLORS["accent_primary"]["light"],
-        secondary=APP_COLORS["accent_secondary"]["light"],
-        error=APP_COLORS["error_color"]["light"],
-        # Add other mappings here as needed, e.g.,
-        # primary_container, on_primary, on_secondary, etc.
+# --- Light Text Theme (using new palette) ---
+light_text_theme = ft.TextTheme(
+    headline_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=24, color=APP_COLORS_LIGHT["text_primary"]),
+    headline_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=APP_COLORS_LIGHT["text_primary"]),
+    headline_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=18, color=APP_COLORS_LIGHT["text_primary"]),
+    title_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=APP_COLORS_LIGHT["text_primary"]),
+    title_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=16, color=APP_COLORS_LIGHT["text_primary"]),
+    title_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.W_600, size=14, color=APP_COLORS_LIGHT["text_primary"]),
+    body_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=16, color=APP_COLORS_LIGHT["text_primary"]),
+    body_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=14, color=APP_COLORS_LIGHT["text_primary"]),
+    label_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=12, color=APP_COLORS_LIGHT["text_secondary"]),
+)
+
+# --- Dark Theme ---
+dark_theme = ft.Theme(
+    color_scheme=ft.ColorScheme(
+        # Primary surface colors
+        surface=APP_COLORS_DARK["primary_background"],
+        on_surface=APP_COLORS_DARK["text_primary"],
+        # Background is often the same as surface for main content area
+        background=APP_COLORS_DARK["primary_background"],
+        on_background=APP_COLORS_DARK["text_primary"],
+
+        # Primary accent color (used for main interactive elements like buttons)
+        primary=APP_COLORS_DARK["accent_blue"],
+        on_primary=ft.Color.WHITE, # Text/icons on primary background
+
+        # Secondary accent color (for other interactive elements)
+        secondary=APP_COLORS_DARK["accent_green"], # Example: using green as secondary
+        on_secondary=ft.Color.WHITE, # Text/icons on secondary background
+
+        # Error color
+        error=APP_COLORS_DARK["accent_red"],
+        on_error=ft.Color.WHITE, # Text/icons on error background
+
+        # For cards or sections that stand out slightly from the main surface
+        surface_variant=APP_COLORS_DARK["secondary_background"],
+        on_surface_variant=APP_COLORS_DARK["text_secondary"],
+
+        outline=APP_COLORS_DARK["divider_border"],
     ),
-    # color_scheme_seed=ft.Colors.BLUE_GREY, # Consider removing if ColorScheme is fully defined
+    font_family=FONT_FAMILY_JOSEFIN_SANS,
+    page_transitions=common_page_transitions,
+    text_theme=dark_text_theme,
+    use_material3=True,
+    # Example for specific component themes (can be expanded)
+    # elevated_button_theme=ft.ElevatedButtonThemeData(
+    #     style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10))
+    # ),
+    # text_button_theme=ft.TextButtonThemeData(
+    #     style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10))
+    # ),
+    # navigation_rail_theme=ft.NavigationRailThemeData(
+    #    selected_icon_theme=ft.IconThemeData(color=APP_COLORS_DARK["accent_blue"]),
+    #    unselected_icon_theme=ft.IconThemeData(color=APP_COLORS_DARK["text_secondary"]),
+    #    selected_label_text_style=ft.TextStyle(color=APP_COLORS_DARK["accent_blue"]),
+    #    unselected_label_text_style=ft.TextStyle(color=APP_COLORS_DARK["text_secondary"]),
+    #    # indicator_color=APP_COLORS_DARK["accent_blue"], # For the selection indicator
+    # )
+)
+
+# --- Light Theme (basic placeholder, can be detailed later) ---
+light_theme = ft.Theme(
+    color_scheme=ft.ColorScheme(
+        surface=APP_COLORS_LIGHT["primary_background"],
+        on_surface=APP_COLORS_LIGHT["text_primary"],
+        background=APP_COLORS_LIGHT["primary_background"],
+        on_background=APP_COLORS_LIGHT["text_primary"],
+        primary=APP_COLORS_LIGHT["accent_blue"],
+        on_primary=ft.Color.WHITE,
+        secondary=APP_COLORS_LIGHT["accent_green"],
+        on_secondary=ft.Color.WHITE,
+        error=APP_COLORS_LIGHT["accent_red"],
+        on_error=ft.Color.WHITE,
+        surface_variant=APP_COLORS_LIGHT["secondary_background"],
+        on_surface_variant=APP_COLORS_LIGHT["text_secondary"],
+        outline=APP_COLORS_LIGHT["divider_border"],
+    ),
     font_family=FONT_FAMILY_JOSEFIN_SANS,
     page_transitions=common_page_transitions,
     text_theme=light_text_theme,
     use_material3=True,
 )
 
-# --- Dark Theme (Color Scheme to be updated next) ---
-dark_theme = ft.Theme(
-    color_scheme=ft.ColorScheme( # Will be updated to use APP_COLORS
-        on_surface=APP_COLORS["text_default"]["dark"],
-        surface=APP_COLORS["surface_background"]["dark"],
-        primary=APP_COLORS["accent_primary"]["dark"],
-        secondary=APP_COLORS["accent_secondary"]["dark"],
-        error=APP_COLORS["error_color"]["dark"],
-        # Add other mappings here
-    ),
-    # color_scheme_seed=ft.Colors.BLUE_GREY, # Consider removing
-    font_family=FONT_FAMILY_JOSEFIN_SANS,
-    page_transitions=common_page_transitions,
-    text_theme=dark_text_theme,
-    use_material3=True,
-)
 
 def get_app_themes() -> tuple[ft.Theme, ft.Theme]:
     """Returns the light and dark themes for the application."""
@@ -136,21 +167,8 @@ app_fonts = {
     f"{FONT_FAMILY_JOSEFIN_SANS} Light": JOSEFIN_SANS_LIGHT_PATH,
 }
 
-# Ensure Flet uses Material 3 design system by default
 ft.theme = ft.Theme(use_material3=True)
 
 if __name__ == "__main__":
-    # Example of how to print theme details (for debugging)
-    print("APP_COLORS['text_default']['light']:", APP_COLORS['text_default']['light'])
-    print("Light Theme Text Theme Body Medium Color:", light_theme.text_theme.body_medium.color) #type: ignore
-    print("Light Theme ColorScheme on_surface:", light_theme.color_scheme.on_surface) #type: ignore
-    print("\nAPP_COLORS['text_default']['dark']:", APP_COLORS['text_default']['dark'])
-    print("Dark Theme Text Theme Body Medium Color:", dark_theme.text_theme.body_medium.color) #type: ignore
-    print("Dark Theme ColorScheme on_surface:", dark_theme.color_scheme.on_surface) #type: ignore
-
-    # Test accessing a color for a component
-    # print("\nSimulated component colors:")
-    # print(f"Light mode button text color (on_primary): {light_theme.color_scheme.on_primary}")
-    # print(f"Light mode button background color (primary): {light_theme.color_scheme.primary}")
-    # print(f"Dark mode button text color (on_primary): {dark_theme.color_scheme.on_primary}")
-    # print(f"Dark mode button background color (primary): {dark_theme.color_scheme.primary}")
+    pass # Add debug prints here if needed
+```
