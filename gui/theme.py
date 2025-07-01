@@ -74,20 +74,19 @@ light_theme = ft.Theme(
 
 # --- Dark Theme (Using user-specified colors) ---
 dark_theme_color_scheme = ft.ColorScheme(
-    brightness=ft.Brightness.DARK,
-    primary=ft.Colors(USER_SPEC_DARK_COLORS["accent_blue_hex"]),
+    primary=USER_SPEC_DARK_COLORS["accent_blue_hex"],
     on_primary=USER_SPEC_DARK_COLORS["text_primary_obj"], # Should be ft.Colors.WHITE
-    surface=ft.Colors(USER_SPEC_DARK_COLORS["primary_background_hex"]),
+    surface=USER_SPEC_DARK_COLORS["primary_background_hex"],
     on_surface=USER_SPEC_DARK_COLORS["text_primary_obj"], # Should be ft.Colors.WHITE
-    background=ft.Colors(USER_SPEC_DARK_COLORS["primary_background_hex"]),
+    background=USER_SPEC_DARK_COLORS["primary_background_hex"],
     on_background=USER_SPEC_DARK_COLORS["text_primary_obj"], # Should be ft.Colors.WHITE
-    error=ft.Colors(USER_SPEC_DARK_COLORS["accent_red_hex"]),
+    error=USER_SPEC_DARK_COLORS["accent_red_hex"],
     on_error=USER_SPEC_DARK_COLORS["text_primary_obj"], # Assuming white text on error color
-    secondary=ft.Colors(USER_SPEC_DARK_COLORS["accent_green_hex"]),
+    secondary=USER_SPEC_DARK_COLORS["accent_green_hex"],
     on_secondary=USER_SPEC_DARK_COLORS["text_primary_obj"], # Assuming white text on secondary
-    surface_variant=ft.Colors(USER_SPEC_DARK_COLORS["secondary_background_hex"]),
+    surface_variant=USER_SPEC_DARK_COLORS["secondary_background_hex"],
     on_surface_variant=USER_SPEC_DARK_COLORS["text_secondary_hex"], # Flet will parse this hex string
-    outline=ft.Colors(USER_SPEC_DARK_COLORS["divider_border_hex"]),
+    outline=USER_SPEC_DARK_COLORS["divider_border_hex"],
 )
 
 dark_theme = ft.Theme(

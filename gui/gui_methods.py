@@ -83,7 +83,7 @@ class ServerStatusUpdater(ft.Text):
                 content=ft.Row(
                     [
                         ft.Icon(
-                            name=ft.Icons.ERROR_OUTLINE, color=ft.colors.AMBER_500, size=32 # Changed to a specific Amber shade
+                            name=ft.Icons.ERROR_OUTLINE, color=ft.Colors.AMBER_500, size=32 # Changed to a specific Amber shade
                         )
                     ],
                     spacing=10,
@@ -102,9 +102,9 @@ class ServerStatusUpdater(ft.Text):
             self.server_status.update(status)
             # Use Flet color objects for theme consistency
             if status["state"] == "Online":
-                self.status_indicator.bgcolor = ft.colors.GREEN_500 # Theme-friendly green
+                self.status_indicator.bgcolor = ft.Colors.GREEN_500 # Theme-friendly green
             else:
-                self.status_indicator.bgcolor = ft.colors.RED_500   # Theme-friendly red
+                self.status_indicator.bgcolor = ft.Colors.RED_500   # Theme-friendly red
 
             self.status_indicator.tooltip = (
                 f"State: {status['state']}\nDetails: {status['text']}"
