@@ -75,19 +75,19 @@ light_theme = ft.Theme(
 # --- Dark Theme (Using user-specified colors) ---
 dark_theme_color_scheme = ft.ColorScheme(
     brightness=ft.Brightness.DARK,
-    primary=ft.Color(USER_SPEC_DARK_COLORS["accent_blue_hex"]),
+    primary=ft.Colors(USER_SPEC_DARK_COLORS["accent_blue_hex"]),
     on_primary=USER_SPEC_DARK_COLORS["text_primary_obj"], # Should be ft.Colors.WHITE
-    surface=ft.Color(USER_SPEC_DARK_COLORS["primary_background_hex"]),
+    surface=ft.Colors(USER_SPEC_DARK_COLORS["primary_background_hex"]),
     on_surface=USER_SPEC_DARK_COLORS["text_primary_obj"], # Should be ft.Colors.WHITE
-    background=ft.Color(USER_SPEC_DARK_COLORS["primary_background_hex"]),
+    background=ft.Colors(USER_SPEC_DARK_COLORS["primary_background_hex"]),
     on_background=USER_SPEC_DARK_COLORS["text_primary_obj"], # Should be ft.Colors.WHITE
-    error=ft.Color(USER_SPEC_DARK_COLORS["accent_red_hex"]),
+    error=ft.Colors(USER_SPEC_DARK_COLORS["accent_red_hex"]),
     on_error=USER_SPEC_DARK_COLORS["text_primary_obj"], # Assuming white text on error color
-    secondary=ft.Color(USER_SPEC_DARK_COLORS["accent_green_hex"]),
+    secondary=ft.Colors(USER_SPEC_DARK_COLORS["accent_green_hex"]),
     on_secondary=USER_SPEC_DARK_COLORS["text_primary_obj"], # Assuming white text on secondary
-    surface_variant=ft.Color(USER_SPEC_DARK_COLORS["secondary_background_hex"]),
+    surface_variant=ft.Colors(USER_SPEC_DARK_COLORS["secondary_background_hex"]),
     on_surface_variant=USER_SPEC_DARK_COLORS["text_secondary_hex"], # Flet will parse this hex string
-    outline=ft.Color(USER_SPEC_DARK_COLORS["divider_border_hex"]),
+    outline=ft.Colors(USER_SPEC_DARK_COLORS["divider_border_hex"]),
 )
 
 dark_theme = ft.Theme(
@@ -110,9 +110,3 @@ app_fonts = {
 
 ft.theme = ft.Theme(use_material3=True)
 
-if __name__ == "__main__":
-    print(f"Dark theme primary color: {dark_theme.color_scheme.primary}") #type: ignore
-    print(f"Dark theme surface color: {dark_theme.color_scheme.surface}") #type: ignore
-    print(f"Dark text theme label_medium color: {dark_text_theme.label_medium.color}") #type: ignore
-    print(f"Light theme primary color from seed: {light_theme.color_scheme_seed}") #type: ignore
-```
