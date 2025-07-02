@@ -34,6 +34,7 @@
     <Compile Include="gui\components.py" />
     <Compile Include="gui\gui_methods.py" />
     <Compile Include="gui\main_flet.py" />
+    <Compile Include="gui\theme.py" />
     <Compile Include="gui\views\about.py" />
     <Compile Include="gui\views\cbc_normal_ranges.py" />
     <Compile Include="gui\views\cbc_report.py" />
