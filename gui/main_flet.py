@@ -13,6 +13,7 @@ from gui.views.patient import patient_view
 from gui.views.settings import settings_view
 from gui.views.about import about_view
 from gui.views.report import report_view
+from gui.theme import get_app_themes, app_fonts # Import themes and fonts
 
 from setting.config import get_config
 
@@ -26,7 +27,13 @@ dark_mode = cfg["DARK_MODE"]
 def main(page: ft.Page):
     page.title = APPLICATION_NAME + APPLICATION_SLOGAN
 
-    page.theme_mode = "dark" if dark_mode else "light"
+    # Apply themes and fonts
+    light_theme, dark_theme_obj = get_app_themes() # Renamed dark_theme to dark_theme_obj to avoid conflict
+    page.theme = light_theme
+    page.dark_theme = dark_theme_obj
+    page.fonts = app_fonts # Register custom fonts
+
+    page.theme_mode = ft.ThemeMode.DARK if dark_mode else ft.ThemeMode.LIGHT
 
 
     # page.window.bgcolor = ft.Colors.with_opacity(0, "BLACK")

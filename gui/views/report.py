@@ -7,8 +7,8 @@ def report_view():
     """
     return ft.Column(
         controls=[
-            ft.Text("Reports", size=20, weight=ft.FontWeight.W_900),
-            ft.Text("Here you can manage your reports page."),
+            ft.Text("Reports", style=ft.TextThemeStyle.HEADLINE_MEDIUM),
+            ft.Text("Here you can manage your reports page."), # Will use default body style
         ],
         expand=True,
     )
