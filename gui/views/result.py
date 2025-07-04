@@ -332,7 +332,7 @@ class CommunicationView(ft.Column):
                 log_error(f"Error in update loop: {e}")
                 self.update_pending = False
             
-            await asyncio.sleep(1)
+            await asyncio.sleep(5)
 
 def result_view(page: ft.Page):
     """Create the communication view"""
