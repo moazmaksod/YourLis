@@ -30,15 +30,15 @@ async def cbc_report_view(page: ft.Page, patient_id):
 
     result_data = result_data[0]
 
+    def close_report_view(e):
+        if report_view:
+            report_view.open = False
+            page.update()  # Update the page to reflect changes
+
     if result_data:
 
         patient_info_view = ReportPatientInfo(result_data)  # type: ignore
         patient_result_view = ReportPatientResult(result_data)  # type: ignore
-
-        def close_report_view(e):
-            if report_view:
-                report_view.open = False
-                page.update()  # Update the page to reflect changes
 
         report_view = ft.AlertDialog(
             modal=True,
@@ -60,7 +60,5 @@ async def cbc_report_view(page: ft.Page, patient_id):
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
-
-
 
     page.update()
