@@ -1,34 +1,26 @@
 import flet as ft
+from typing import Dict, Final
 
-# --- User-Specified Dark Colors ---
-# Storing raw hex strings and direct ft.Colors objects as per user specification.
-# These will be used to construct the dark_theme_color_scheme and dark_text_theme.
-USER_SPEC_DARK_COLORS = {
-    "primary_background_hex": "#1A1A1A",
-    "secondary_background_hex": "#2C2C2C",
-    "sidebar_background_hex": "#222222", # Note: sidebar bg needs explicit component styling
-    "accent_blue_hex": "#3498DB",
-    "accent_yellow_hex": "#F39C12", # For reference
-    "accent_red_hex": "#E74C3C",
-    "accent_green_hex": "#2ECC71",
-    "text_primary_obj": ft.Colors.WHITE,
-    "text_secondary_hex": "#CCCCCC",
-    "divider_border_hex": "#444444",
-    # Gradients for reference, not used directly in ColorScheme/TextTheme
-    "gradient_blue_teal_start_hex": "#00CED1",
-    "gradient_blue_teal_end_hex": "#1ABC9C",
-    "gradient_blue_purple_start_hex": "#3498DB",
-    "gradient_blue_purple_end_hex": "#8E44AD",
+# ==============================================================================
+# --- 1. THEME CONFIGURATION & CONSTANTS ---
+# ==============================================================================
+
+# --- Font Family ---
+# Define the primary font family for consistent use across the app.
+FONT_FAMILY_JOSEFIN_SANS: Final[str] = "Josefin Sans"
+
+# --- App Fonts ---
+# A dictionary mapping the font family names to their file paths.
+# This is loaded into the app to make the fonts available.
+APP_FONTS: Final[Dict[str, str]] = {
+    FONT_FAMILY_JOSEFIN_SANS: "/fonts/sans/JosefinSans-Regular.ttf",
+    f"{FONT_FAMILY_JOSEFIN_SANS} Bold": "/fonts/sans/JosefinSans-Bold.ttf",
+    f"{FONT_FAMILY_JOSEFIN_SANS} Light": "/fonts/sans/JosefinSans-Light.ttf",
 }
 
-# Font definitions
-JOSEFIN_SANS_REGULAR_PATH = "/fonts/sans/JosefinSans-Regular.ttf"
-JOSEFIN_SANS_BOLD_PATH = "/fonts/sans/JosefinSans-Bold.ttf"
-JOSEFIN_SANS_LIGHT_PATH = "/fonts/sans/JosefinSans-Light.ttf"
-FONT_FAMILY_JOSEFIN_SANS = "Josefin Sans"
-
-# Common page transitions
-common_page_transitions = ft.PageTransitionsTheme(
+# --- Common Page Transitions ---
+# Centralize page transition themes for uniform navigation animations.
+COMMON_PAGE_TRANSITIONS: Final[ft.PageTransitionsTheme] = ft.PageTransitionsTheme(
     android=ft.PageTransitionTheme.OPEN_UPWARDS,
     ios=ft.PageTransitionTheme.CUPERTINO,
     macos=ft.PageTransitionTheme.ZOOM,
@@ -36,76 +28,115 @@ common_page_transitions = ft.PageTransitionsTheme(
     windows=ft.PageTransitionTheme.ZOOM,
 )
 
+# ==============================================================================
+# --- 2. COLOR DEFINITIONS (SINGLE SOURCE OF TRUTH) ---
+# ==============================================================================
+
+# --- Light Theme Colors ---
+# Using a seed color is the recommended Material 3 approach.
+# It generates a full, harmonious color scheme automatically.
+LIGHT_THEME_SEED_COLOR: Final[str] = ft.Colors.BLUE_GREY_700
+
+# --- Dark Theme Colors ---
+# Define a clear palette for the dark theme using a class for organization.
+# This structure makes it easy to see and modify the entire theme's color story.
+class DarkThemeColors:
+    PRIMARY: Final[str] = "#3498DB"          # Accent Blue
+    ON_PRIMARY: Final[str] = "#FFFFFF"       # White Text on Primary
+    BACKGROUND: Final[str] = "#1A1A1A"      # Primary Background
+    ON_BACKGROUND: Final[str] = "#FFFFFF"    # White Text on Background
+    SURFACE: Final[str] = "#1A1A1A"          # Component Backgrounds (e.g., Card)
+    ON_SURFACE: Final[str] = "#FFFFFF"       # White Text on Surface
+    SURFACE_VARIANT: Final[str] = "#2C2C2C"   # Secondary Background (e.g., Dialogs, Sidebar)
+    ON_SURFACE_VARIANT: Final[str] = "#CCCCCC" # Grey Text on Variant
+    SECONDARY: Final[str] = "#2ECC71"        # Accent Green
+    ON_SECONDARY: Final[str] = "#FFFFFF"     # White Text on Secondary
+    ERROR: Final[str] = "#E74C3C"            # Accent Red
+    ON_ERROR: Final[str] = "#FFFFFF"         # White Text on Error
+    OUTLINE: Final[str] = "#444444"          # Borders, Dividers
+
+# ==============================================================================
+# --- 3. TEXT THEME DEFINITIONS ---
+# ==============================================================================
+
+def _create_text_theme(primary_color: str) -> ft.TextTheme:
+    """
+    Factory function to create a TextTheme with a consistent font family.
+    This reduces code duplication for light and dark themes.
+    """
+    return ft.TextTheme(
+        headline_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=24, color=primary_color),
+        headline_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=primary_color),
+        headline_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=18, color=primary_color),
+        title_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=primary_color),
+        title_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=16, color=primary_color),
+        title_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.W_600, size=14, color=primary_color),
+        body_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=16, color=primary_color),
+        body_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=14, color=primary_color),
+        # Let label color be inherited by default, can be overridden if needed.
+        label_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=12),
+    )
+
 # --- Light Text Theme ---
-light_text_color = ft.Colors.BLACK
-light_text_theme = ft.TextTheme(
-    headline_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=24, color=light_text_color),
-    headline_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=light_text_color),
-    headline_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=18, color=light_text_color),
-    title_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=light_text_color),
-    title_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=16, color=light_text_color),
-    title_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.W_600, size=14, color=light_text_color),
-    body_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=16, color=light_text_color),
-    body_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=14, color=light_text_color),
-    label_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=12, color=light_text_color),
-)
+# Material 3 themes handle most text colors automatically based on the background.
+# We only need to define the typography.
+light_text_theme = _create_text_theme(primary_color=ft.Colors.BLACK)
 
 # --- Dark Text Theme ---
-dark_text_theme = ft.TextTheme(
-    headline_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=24, color=USER_SPEC_DARK_COLORS["text_primary_obj"]),
-    headline_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=USER_SPEC_DARK_COLORS["text_primary_obj"]),
-    headline_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=18, color=USER_SPEC_DARK_COLORS["text_primary_obj"]),
-    title_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=20, color=USER_SPEC_DARK_COLORS["text_primary_obj"]),
-    title_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.BOLD, size=16, color=USER_SPEC_DARK_COLORS["text_primary_obj"]),
-    title_small=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.W_600, size=14, color=USER_SPEC_DARK_COLORS["text_primary_obj"]),
-    body_large=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=16, color=USER_SPEC_DARK_COLORS["text_primary_obj"]),
-    body_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=14, color=USER_SPEC_DARK_COLORS["text_primary_obj"]),
-    label_medium=ft.TextStyle(font_family=FONT_FAMILY_JOSEFIN_SANS, weight=ft.FontWeight.NORMAL, size=12, color=USER_SPEC_DARK_COLORS["text_secondary_hex"]), # Flet will parse this hex string
-)
+# Create the base theme and then customize the specific secondary text color.
+dark_text_theme = _create_text_theme(primary_color=DarkThemeColors.ON_BACKGROUND)
+dark_text_theme.label_medium.color = DarkThemeColors.ON_SURFACE_VARIANT # Specific override for secondary text
 
-# --- Light Theme (Simplified) ---
+# ==============================================================================
+# --- 4. THEME OBJECTS ---
+# ==============================================================================
+
+# --- Light Theme ---
+# Simplified by using a seed color, which is the recommended M3 approach.
 light_theme = ft.Theme(
-    color_scheme_seed=ft.Colors.BLUE_GREY,
+    color_scheme_seed=LIGHT_THEME_SEED_COLOR,
     font_family=FONT_FAMILY_JOSEFIN_SANS,
-    page_transitions=common_page_transitions,
+    page_transitions=COMMON_PAGE_TRANSITIONS,
     text_theme=light_text_theme,
     use_material3=True,
 )
 
-# --- Dark Theme (Using user-specified colors) ---
-dark_theme_color_scheme = ft.ColorScheme(
-    primary=USER_SPEC_DARK_COLORS["accent_blue_hex"],
-    on_primary=USER_SPEC_DARK_COLORS["text_primary_obj"], # Should be ft.Colors.WHITE
-    surface=USER_SPEC_DARK_COLORS["primary_background_hex"],
-    on_surface=USER_SPEC_DARK_COLORS["text_primary_obj"], # Should be ft.Colors.WHITE
-    background=USER_SPEC_DARK_COLORS["primary_background_hex"],
-    on_background=USER_SPEC_DARK_COLORS["text_primary_obj"], # Should be ft.Colors.WHITE
-    error=USER_SPEC_DARK_COLORS["accent_red_hex"],
-    on_error=USER_SPEC_DARK_COLORS["text_primary_obj"], # Assuming white text on error color
-    secondary=USER_SPEC_DARK_COLORS["accent_green_hex"],
-    on_secondary=USER_SPEC_DARK_COLORS["text_primary_obj"], # Assuming white text on secondary
-    surface_variant=USER_SPEC_DARK_COLORS["secondary_background_hex"],
-    on_surface_variant=USER_SPEC_DARK_COLORS["text_secondary_hex"], # Flet will parse this hex string
-    outline=USER_SPEC_DARK_COLORS["divider_border_hex"],
-)
-
+# --- Dark Theme ---
+# Constructed using the explicit color scheme defined in the DarkThemeColors class.
 dark_theme = ft.Theme(
-    color_scheme=dark_theme_color_scheme,
+    color_scheme=ft.ColorScheme(
+        primary=DarkThemeColors.PRIMARY,
+        on_primary=DarkThemeColors.ON_PRIMARY,
+        background=DarkThemeColors.BACKGROUND,
+        on_background=DarkThemeColors.ON_BACKGROUND,
+        surface=DarkThemeColors.SURFACE,
+        on_surface=DarkThemeColors.ON_SURFACE,
+        surface_variant=DarkThemeColors.SURFACE_VARIANT,
+        on_surface_variant=DarkThemeColors.ON_SURFACE_VARIANT,
+        secondary=DarkThemeColors.SECONDARY,
+        on_secondary=DarkThemeColors.ON_SECONDARY,
+        error=DarkThemeColors.ERROR,
+        on_error=DarkThemeColors.ON_ERROR,
+        outline=DarkThemeColors.OUTLINE,
+    ),
     font_family=FONT_FAMILY_JOSEFIN_SANS,
-    page_transitions=common_page_transitions,
+    page_transitions=COMMON_PAGE_TRANSITIONS,
     text_theme=dark_text_theme,
     use_material3=True,
 )
 
+
+# ==============================================================================
+# --- 5. PUBLIC API ---
+# ==============================================================================
+
 def get_app_themes() -> tuple[ft.Theme, ft.Theme]:
-    """Returns the light and dark themes for the application."""
+    """Returns the configured light and dark themes for the application."""
     return light_theme, dark_theme
 
-app_fonts = {
-    FONT_FAMILY_JOSEFIN_SANS: JOSEFIN_SANS_REGULAR_PATH,
-    f"{FONT_FAMILY_JOSEFIN_SANS} Bold": JOSEFIN_SANS_BOLD_PATH,
-    f"{FONT_FAMILY_JOSEFIN_SANS} Light": JOSEFIN_SANS_LIGHT_PATH,
-}
+def get_app_fonts() -> Dict[str, str]:
+    """Returns the dictionary of fonts to be loaded by the app."""
+    return APP_FONTS
 
-ft.theme = ft.Theme(use_material3=True)
-
+# Alias for direct import, maintaining compatibility with existing code.
+app_fonts = APP_FONTS

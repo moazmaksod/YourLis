@@ -7,117 +7,110 @@ from log.logger import log_info, log_error
 
 
 class MessageBubble(ft.Container):
-    """A chat bubble to display a single message"""
-    def __init__(self, message: dict):
+    """A theme-aware chat bubble that builds its content on initialization."""
+    def __init__(self, message: dict, theme: ft.Theme):
+        super().__init__()
         self.message = message
+        self.theme = theme # Store the passed theme object
         self.timestamp = datetime.fromisoformat(message["timestamp"])
         
-        # Determine message type and styling
-        is_server = message["direction"] == "server"
-        is_info = message["direction"] == "info"
-        is_error = message["direction"] == "error"
+        # Build the control's UI directly in the constructor using the provided theme.
+        is_server = self.message["direction"] == "server"
+        is_info = self.message["direction"] == "info"
+        is_error = self.message["direction"] == "error"
         
-        # Set colors based on message type
         if is_info:
             client_color = ft.Colors.GREY_700
-            #bg_color = ft.Colors.GREY_200
         elif is_error:
             client_color = ft.Colors.RED_600
-            #bg_color = ft.Colors.RED_100 # Brighter for error background
         else: # Server or Client
-            client_color = ft.Colors.BLUE_600 if is_server else ft.Colors.GREEN_600
-            #bg_color = ft.Colors.BLUE_50 if is_server else ft.Colors.GREEN_50
+            client_color = self.theme.color_scheme.primary if is_server else self.theme.color_scheme.secondary
         
-        # Create message content with HL7 formatting
         message_text = ft.Container(
             content=ft.Text(
-                message["message"],
+                self.message["message"],
                 selectable=True,
                 no_wrap=False,
                 max_lines=None,
-                size=14, # Keep specific size for bubble
-                weight=ft.FontWeight.NORMAL, # Keep specific weight
-                # color attribute removed to inherit from theme
             ),
-            #bgcolor=bg_color, # Apply background to container
+            bgcolor=self.theme.color_scheme.surface_variant,
             padding=10,
-            width=350  # Fixed width for better readability
+            border_radius=10,
+            width=350
         )
         
-        content = ft.Column(
+        content_column = ft.Column(
             controls=[
                 ft.Text(
-                    f"{message['client_name']} ({message['direction']})",
-                    size=12, # Keep specific size
-                    weight=ft.FontWeight.BOLD, # Keep specific weight
+                    f"{self.message['client_name']} ({self.message['direction']})",
+                    weight=ft.FontWeight.BOLD,
                     color=client_color,
                     selectable=True
                 ),
                 message_text,
                 ft.Text(
                     self.timestamp.strftime("%H:%M:%S"),
-                    size=10, # Keep specific size
-                    color=ft.Colors.GREY_600,  # Adjusted grey
+                    size=10,
+                    color=self.theme.color_scheme.on_surface_variant,
                     selectable=True
                 ),
             ],
             spacing=4,
             alignment=ft.MainAxisAlignment.START if is_server else ft.MainAxisAlignment.END,
+            horizontal_alignment=ft.CrossAxisAlignment.START if is_server else ft.CrossAxisAlignment.END,
             tight=True
         )
         
-        super().__init__(
-            content=content,
-            alignment=ft.alignment.center_right if not is_server else ft.alignment.center_left,
-            margin=ft.margin.symmetric(vertical=5),
-            animate=300,  # Simple animation duration
-            padding=ft.padding.symmetric(horizontal=10),
-            width=400,
-        )
+        self.content = content_column
+        self.alignment = ft.alignment.center_left if is_server else ft.alignment.center_right
+        self.margin = ft.margin.symmetric(vertical=5)
+        self.padding = ft.padding.symmetric(horizontal=10)
+        self.width = 400
+
 
 class DeviceTab(ft.Container):
-    """A tab containing messages for a specific device"""
-    def __init__(self, device_name: str):
+    """A tab containing messages for a specific device."""
+    def __init__(self, device_name: str, page: ft.Page, theme: ft.Theme):
         super().__init__(expand=True)
         self.device_name = device_name
-        self.messages = []  # Store message history
-        self.scroll_position = 0  # Store scroll position
+        self.page = page # Still needed for checking if control is mounted
+        self.theme = theme # Store the passed theme object
+        self.messages = []
+        self.scroll_position = 0
         
-        # Message list with scrolling but without auto_scroll
         self.message_list = ft.ListView(
             expand=True,
             spacing=10,
             padding=20,
-            auto_scroll=False,  # Disable auto-scroll to end
-            on_scroll=self.on_list_scroll,  # Track scroll position
+            auto_scroll=False,
+            on_scroll=self.on_list_scroll,
         )
-        
-        # Wrap ListView in a Container for border and padding
+
+        # Build UI directly in constructor using the provided theme.
         self.content = ft.Container(
             content=self.message_list,
             expand=True,
-            border=ft.border.all(1, ft.Colors.GREY_400), # Adjusted border color
+            border=ft.border.all(1, self.theme.color_scheme.outline),
+            border_radius=8,
             padding=10
         )
-    
+
     def on_list_scroll(self, e: ft.ScrollEvent):
-        """Track scroll position of the list"""
         self.scroll_position = e.pixels
         
     def update_messages(self, messages: list):
-        """Update messages in this tab"""
-        # Sort messages by timestamp
         sorted_messages = sorted(messages, key=lambda x: x["timestamp"])
         
-        # Check if messages have changed
         if sorted_messages != self.messages:
-            current_scroll = self.scroll_position  # Save current scroll position
+            current_scroll = self.scroll_position
+            self.messages = sorted_messages.copy()
+            # Pass the theme object to the MessageBubble
+            self.message_list.controls = [MessageBubble(msg, self.theme) for msg in sorted_messages]
             
-            self.messages = sorted_messages.copy()  # Make a copy to prevent reference issues
-            self.message_list.controls = [MessageBubble(msg) for msg in sorted_messages]
-            
-            # Restore scroll position after update
-            self.message_list.scroll_to(offset=current_scroll, duration=0)
+            # Check if the ListView itself is on the page before scrolling.
+            if self.message_list.page:
+                self.message_list.scroll_to(offset=current_scroll, duration=0)
+
             return True
         return False
 
@@ -132,41 +125,47 @@ class CommunicationView(ft.Column):
     def __init__(self, page: ft.Page):
         super().__init__(expand=True)
         self.page = page
-        self.running = True
-        self.device_tabs = {}  # Store TabInfo objects
-        self.message_cutoff_times = {}  # Track cutoff time for messages per device
-        self.update_pending = False  # Flag to prevent multiple simultaneous updates
-        self.last_selected_tab = None  # Track the last selected tab
+        self.running = False
+        self.device_tabs = {}
+        self.message_cutoff_times = {}
+        self.update_pending = False
+        self.last_selected_tab = None
         
-        # Create tabs
+        # FIX: Determine the active theme once during initialization.
+        self.active_theme = page.dark_theme if page.theme_mode == ft.ThemeMode.DARK else page.theme
+        
         self.tabs = ft.Tabs(
             selected_index=0,
             animation_duration=300,
             expand=True,
-            on_change=self.on_tab_change  # Track tab changes
+            on_change=self.on_tab_change
         )
         
-        # Add controls to view
-        self.controls = [
-            self.tabs
-        ]
-        
-        # Start message updates
-        if self.page:
-            self.page.run_task(self.update_loop)
+        self.controls = [self.tabs]
     
+    def did_mount(self):
+        self.running = True
+        self.page.run_task(self.update_loop)
+        log_info("CommunicationView mounted, starting update loop.")
+
+    def will_unmount(self):
+        self.running = False
+        self.device_tabs.clear()
+        self.message_cutoff_times.clear()
+        log_info("CommunicationView unmounted, stopping update loop.")
+
     def on_tab_change(self, e):
-        """Handle tab changes and restore scroll positions"""
         if self.last_selected_tab is not None and len(self.tabs.tabs) > 0:
-            # Find the newly selected tab
             new_tab_info = None
-            for device_addr, tab_info in self.device_tabs.items():
-                if tab_info.tab == self.tabs.tabs[self.tabs.selected_index]:
-                    new_tab_info = tab_info
-                    break
+            if self.tabs.selected_index < len(self.tabs.tabs):
+                selected_tab_control = self.tabs.tabs[self.tabs.selected_index]
+                for tab_info in self.device_tabs.values():
+                    if tab_info.tab == selected_tab_control:
+                        new_tab_info = tab_info
+                        break
             
-            if new_tab_info:
-                # Restore the scroll position for the newly selected tab
+            # Check if the tab's content has a page object, which confirms it's mounted.
+            if new_tab_info and new_tab_info.content.page:
                 new_tab_info.content.message_list.scroll_to(
                     offset=new_tab_info.content.scroll_position,
                     duration=0
@@ -174,57 +173,33 @@ class CommunicationView(ft.Column):
         
         self.last_selected_tab = self.tabs.selected_index
     
-    def will_unmount(self):
-        """Cleanup when view is unmounted"""
-        self.running = False
-        self.device_tabs.clear()
-        self.message_cutoff_times.clear()
-    
     def close_tab(self, device_address: str):
-        """Close a device tab and clean up its resources"""
         if device_address in self.device_tabs:
-            tab_info = self.device_tabs[device_address]
-            # Remove tab from view
+            tab_info = self.device_tabs.pop(device_address)
             if tab_info.tab in self.tabs.tabs:
                 self.tabs.tabs.remove(tab_info.tab)
-            # Clean up device data
-            del self.device_tabs[device_address]
-            # Set message cutoff time to now for this device
             self.message_cutoff_times[device_address] = datetime.now()
             
+            if self.tabs.tabs and self.tabs.selected_index >= len(self.tabs.tabs):
+                self.tabs.selected_index = len(self.tabs.tabs) - 1
+            
             self.update()
-            if len(self.tabs.tabs) > 0:
-                self.tabs.selected_index = 0
     
     def get_device_tab(self, device_name: str, device_address: str) -> TabInfo:
-        """Get or create a tab for the specified device"""
-
-        # device logo for icon if available
-        device_logo_url = f'assets/logo/{device_name.lower()}.png' if '192.168' not in device_name else 'assets/logo/default_device.png'
-
-        device_logo = ft.Image(
-            src=device_logo_url,
-            width=32,
-            height=32,
-            border_radius=16,
-            fit=ft.ImageFit.FILL,
-        )
         if device_address not in self.device_tabs:
-            # Create new device tab content
-            device_tab_content = DeviceTab(device_address)
+            # Pass the pre-determined active theme to the DeviceTab constructor.
+            device_tab_content = DeviceTab(device_name, self.page, self.active_theme)
             
-            new_tab_index = len(self.device_tabs) + 1  # New tab index
-            # Create tab text and close button
+            new_tab_index = len(self.device_tabs) + 1
             tab_text = ft.Row(
                 controls=[
                     ft.Text(f"{new_tab_index} - {device_name}"),
-                    device_logo,
                     ft.IconButton(
                         icon=ft.Icons.CLOSE,
                         icon_size=14,
-                        on_click=lambda e, addr=device_address: self.close_tab(addr),
+                        on_click=lambda _, addr=device_address: self.close_tab(addr),
                         style=ft.ButtonStyle(
-                            color={"hovered": ft.Colors.RED_700}, # Adjusted hover color
+                            color={"hovered": ft.Colors.RED_700},
                             padding=5
                         )
                     )
@@ -234,104 +209,61 @@ class CommunicationView(ft.Column):
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             )
 
-            # Create new tab
             tab = ft.Tab(
                 tab_content=tab_text,
                 content=device_tab_content
             )
             
-            # Store tab info
             tab_info = TabInfo(tab=tab, content=device_tab_content)
             self.device_tabs[device_address] = tab_info
             
-            # Add tab to tabs control
             self.tabs.tabs.append(tab)
-            self.update()
-        else:
-            exist_tab_index = self.tabs.tabs.index(self.device_tabs[device_address].tab)
-            # Update existing tab name if needed
-            tab_info = self.device_tabs[device_address]
-            current_device_name = tab_info.tab.tab_content.controls[0].value
-            new_device_name = f"{exist_tab_index + 1} - {device_name}"
-            if new_device_name != current_device_name:
-                tab_info.tab.tab_content.controls[0].value = new_device_name
-                self.update()
-            # update device logo if needed
-            new_device_logo_url = f'assets/logo/{device_name.lower()}.png' if '192.168' not in device_name else r'assets/logo/default_device.png'
-
-            if new_device_logo_url != tab_info.tab.tab_content.controls[1].src:
-                tab_info.tab.tab_content.controls[1].src = new_device_logo_url
-
+            # This update is crucial to ensure the new tab is rendered before any further actions.
+            self.page.update()
 
         return self.device_tabs[device_address]
     
     def filter_new_messages(self, messages: list) -> dict:
-        """Filter messages to only include new ones after tab closure"""
         device_messages = defaultdict(list)
-        
         for msg in messages:
-            if msg.get("client_address"):
-                client_address = msg["client_address"]
+            if client_address := msg.get("client_address"):
                 msg_timestamp = datetime.fromisoformat(msg["timestamp"])
-                
-                # Check if we have a cutoff time for this device
                 cutoff_time = self.message_cutoff_times.get(client_address)
-                
-                # Include message if:
-                # 1. No cutoff time exists (tab was never closed) OR
-                # 2. Message is newer than the cutoff time
                 if not cutoff_time or msg_timestamp > cutoff_time:
                     device_messages[client_address].append(msg)
-        
         return device_messages
     
     def update_device_tabs(self, messages: list):
-        """Update all device tabs with their respective messages"""
         try:
             if not messages:
                 return False
 
-            # Filter and group messages by device
             device_messages = self.filter_new_messages(messages)
             updated = False
             
-            # Update or create device-specific tabs
             for client_address, device_msgs in device_messages.items():
-                if device_msgs:  # Only process if there are new messages
+                if device_msgs:
                     device_name = device_msgs[-1]["client_name"]
                     tab_info = self.get_device_tab(device_name, client_address)
-                    
                     if tab_info and tab_info.content.update_messages(device_msgs):
                         updated = True
-
             return updated
-            
         except Exception as e:
             log_error(f"Error updating device tabs: {e}")
             return False
     
     async def update_loop(self):
-        """Main update loop for fetching and displaying messages"""
-        last_messages = []  # Keep track of last processed messages
-        
         while self.running:
             try:
                 if not self.update_pending:
                     self.update_pending = True
                     messages = await fetch_communication_messages()
-                    
-                    # Only update if messages have changed
-                    if messages != last_messages:
-                        last_messages = messages.copy()
-                        if self.update_device_tabs(messages):
-                            self.page.update()
-                    
+                    if self.update_device_tabs(messages) and self.page:
+                        self.page.update()
                     self.update_pending = False
-                    
             except Exception as e:
                 log_error(f"Error in update loop: {e}")
                 self.update_pending = False
-            
             await asyncio.sleep(5)
 
 def result_view(page: ft.Page):

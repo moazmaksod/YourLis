@@ -52,5 +52,15 @@ async def cbc_report_view(page: ft.Page, patient_id):
         )
         page.overlay.append(report_view)
         report_view.open = True
+    else:
+        ft.AlertDialog(
+            title=ft.Text("No Result Found"),
+            actions=[
+                ft.ElevatedButton("Close", on_click=close_report_view),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+
 
     page.update()
