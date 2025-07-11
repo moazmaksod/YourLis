@@ -37,6 +37,7 @@ LOG_DIR = "logs"
 LOG_FILE_NAME = "HealthMesh.log"
 CONFIG_URL = r"setting\config.json"
 DARK_MODE = True
+AUTO_START_CBC_SERVER = True  # Auto start CBC device listening server
 
 
 # Some db value
@@ -88,6 +89,7 @@ default_config_data = {
     "LOG_FILE_NAME": LOG_FILE_NAME,
     "CONFIG_URL": CONFIG_URL,
     "DARK_MODE": DARK_MODE,
+    "AUTO_START_CBC_SERVER": AUTO_START_CBC_SERVER,
     "CBC_TEST_CODE": CBC_TEST_CODE,
     "HGB_TEST_CODE": HGB_TEST_CODE,
     "TEST_FINISH_CODE": TEST_FINISH_CODE,

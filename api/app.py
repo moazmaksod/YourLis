@@ -53,8 +53,15 @@ async def get_messages():
 # Endpoint to start the server
 @app.post("/server/start")
 async def start_server_api():
-    await start_server()  # Start the server
-    return {"message": "Server started successfully."}
+    from log.logger import log_info, log_error
+    try:
+        log_info("[API] /server/start endpoint called. Attempting to start CBC server...")
+        await start_server()  # Start the server
+        log_info("[API] CBC server started successfully.")
+        return {"message": "Server started successfully."}
+    except Exception as e:
+        log_error(f"[API] Exception in /server/start: {e}")
+        return {"message": f"Failed to start server: {e}"}
 
 # Endpoint to stop the server
 @app.post("/server/stop")

@@ -135,7 +135,8 @@ async def client_connected(reader, writer):
 
 
 async def start_server():
-    await run_server()  # Start the server asynchronously
+    # Start the server asynchronously in the background so the API endpoint can return immediately
+    asyncio.create_task(run_server())
 
 
 async def stop_server():

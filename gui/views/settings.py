@@ -17,6 +17,7 @@ def settings_view(page: ft.Page):
         setting_to_save = {
             "CONFIG_URL": config_url.value,
             "DARK_MODE": dark_mode.value,
+            "AUTO_START_CBC_SERVER": auto_start_cbc_server.value,
             "SERVER_HOST": server_host.value,
             "SERVER_PORT": server_port.value,
             "DB_TYPE": database_type.value,
@@ -82,6 +83,7 @@ def settings_view(page: ft.Page):
     # settings controls initializing
     config_url = ft.TextField(label="Configuration URL", value=cfg["CONFIG_URL"])
     dark_mode = ft.Switch(label="Dark mode", value=cfg["DARK_MODE"], on_change=theme_change)
+    auto_start_cbc_server = ft.Switch(label="Auto Start CBC Server", value=cfg.get("AUTO_START_CBC_SERVER", True))
     server_host = ft.TextField(label="Server Host", value=cfg["SERVER_HOST"])
     server_port = ft.TextField(label="Server Port", value=cfg["SERVER_PORT"])
     database_type = ft.TextField(label="Database Type", value=cfg["DB_TYPE"])
@@ -119,7 +121,7 @@ def settings_view(page: ft.Page):
                 ft.Text("Application Settings", style=ft.TextThemeStyle.HEADLINE_SMALL),
                 ft.Text("Configure the application's appearance and behavior."),
                 ft.Divider(opacity=0),
-                ft.Row(controls=[config_url, dark_mode]),
+                ft.Row(controls=[config_url, dark_mode, auto_start_cbc_server]),
             ]
         )
     )
