@@ -116,7 +116,7 @@ def side_menu(on_item_click):
                     icon=ft.Icon(ft.Icons.SPACE_DASHBOARD), label="Dashboard"
                 ),
                 ft.NavigationRailDestination(
-                    icon=ft.Icon(ft.Icons.NEWSPAPER), label="Results"
+                    icon=ft.Icon(ft.Icons.INSERT_COMMENT_ROUNDED), label="Stream"
                 ),
                 ft.NavigationRailDestination(
                     icon=ft.Icon(ft.Icons.GROUPS_SHARP), label="patient"
@@ -132,7 +132,7 @@ def side_menu(on_item_click):
                 ),
             ],
         ),
-        height=600
+        height=600,
     )
 
 

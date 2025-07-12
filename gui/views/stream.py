@@ -138,7 +138,7 @@ class TabInfo:
 
 
 class CommunicationView(ft.Column):
-    """Main view for device-server communication"""
+    """Main view for device-server communication (streaming)"""
 
     def __init__(self, page: ft.Page):
         super().__init__(expand=True)
@@ -235,7 +235,24 @@ class CommunicationView(ft.Column):
             self.tabs.tabs.append(tab)
             # This update is crucial to ensure the new tab is rendered before any further actions.
             self.page.update()
-
+        else:
+            # Update tab name if device_name has changed
+            tab_info = self.device_tabs[device_address]
+            tab_row = tab_info.tab.tab_content
+            # tab_row.controls[0] is the ft.Text for the device name
+            current_label = (
+                tab_row.controls[0].value
+                if hasattr(tab_row.controls[0], "value")
+                else tab_row.controls[0].text
+            )
+            new_tab_index = list(self.device_tabs.keys()).index(device_address) + 1
+            new_label = f"{new_tab_index} - {device_name}"
+            if current_label != new_label:
+                if hasattr(tab_row.controls[0], "value"):
+                    tab_row.controls[0].value = new_label
+                else:
+                    tab_row.controls[0].text = new_label
+                self.page.update()
         return self.device_tabs[device_address]
 
     def filter_new_messages(self, messages: list) -> dict:
@@ -279,9 +296,9 @@ class CommunicationView(ft.Column):
             except Exception as e:
                 log_error(f"Error in update loop: {e}")
                 self.update_pending = False
-            await asyncio.sleep(5)
+            await asyncio.sleep(1)  # Poll every 1 second for near real-time updates
 
 
-def result_view(page: ft.Page):
+def stream_view(page: ft.Page):
     """Create the communication view"""
     return CommunicationView(page)

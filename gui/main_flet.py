@@ -8,12 +8,12 @@ from gui.components import (
     footer,
 )
 from gui.views.dashboard import dashboard_view
-from gui.views.result import result_view
+from gui.views.stream import stream_view
 from gui.views.patient import patient_view
 from gui.views.settings import settings_view
 from gui.views.about import about_view
 from gui.views.report import report_view
-from gui.theme import get_app_themes, app_fonts # Import themes and fonts
+from gui.theme import get_app_themes, app_fonts  # Import themes and fonts
 
 from setting.config import get_config
 
@@ -28,13 +28,14 @@ def main(page: ft.Page):
     page.title = APPLICATION_NAME + APPLICATION_SLOGAN
 
     # Apply themes and fonts
-    light_theme, dark_theme_obj = get_app_themes() # Renamed dark_theme to dark_theme_obj to avoid conflict
+    light_theme, dark_theme_obj = (
+        get_app_themes()
+    )  # Renamed dark_theme to dark_theme_obj to avoid conflict
     page.theme = light_theme
     page.dark_theme = dark_theme_obj
-    page.fonts = app_fonts # Register custom fonts
+    page.fonts = app_fonts  # Register custom fonts
 
     page.theme_mode = ft.ThemeMode.DARK if dark_mode else ft.ThemeMode.LIGHT
-
 
     # page.window.bgcolor = ft.Colors.with_opacity(0, "BLACK")
     # page.bgcolor = ft.Colors.with_opacity(0, "BLACK")
@@ -73,7 +74,7 @@ def main(page: ft.Page):
         # Map menu index to views
         views_map = {
             0: "dashboard",
-            1: "result",
+            1: "Stream",
             2: "patient",
             3: "report",
             4: "settings",
@@ -88,8 +89,8 @@ def main(page: ft.Page):
         if view_key not in cached_views:
             if view_key == "dashboard":
                 cached_views[view_key] = dashboard_view()
-            elif view_key == "result":
-                cached_views[view_key] = result_view(page)  # Pass the page parameter
+            elif view_key == "Stream":
+                cached_views[view_key] = stream_view(page)  # Pass the page parameter
             elif view_key == "patient":
                 cached_views[view_key] = patient_view(page)
             elif view_key == "report":
