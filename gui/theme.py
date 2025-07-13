@@ -33,7 +33,21 @@ COMMON_PAGE_TRANSITIONS: Final[ft.PageTransitionsTheme] = ft.PageTransitionsThem
 # ==============================================================================
 
 # --- Light Theme Colors ---
-# Using a seed color is the recommended Material 3 approach.
+class LightThemeColors:
+    PRIMARY: Final[str] = "#2196F3"          # Blue
+    ON_PRIMARY: Final[str] = "#FFFFFF"
+    BACKGROUND: Final[str] = "#FFFFFF"
+    ON_BACKGROUND: Final[str] = "#000000"
+    SURFACE: Final[str] = "#FFFFFF"
+    ON_SURFACE: Final[str] = "#000000"
+    SURFACE_VARIANT: Final[str] = "#F5F5F5"
+    ON_SURFACE_VARIANT: Final[str] = "#333333"
+    SECONDARY: Final[str] = "#FFEB3B"        # Yellow
+    ON_SECONDARY: Final[str] = "#000000"
+    ERROR: Final[str] = "#E74C3C"
+    ON_ERROR: Final[str] = "#FFFFFF"
+    OUTLINE: Final[str] = "#CCCCCC"
+
 # It generates a full, harmonious color scheme automatically.
 LIGHT_THEME_SEED_COLOR: Final[str] = ft.Colors.BLUE_GREY_700
 
@@ -92,9 +106,23 @@ dark_text_theme.label_medium.color = DarkThemeColors.ON_SURFACE_VARIANT # Specif
 # ==============================================================================
 
 # --- Light Theme ---
-# Simplified by using a seed color, which is the recommended M3 approach.
+# Now uses an explicit color_scheme for full compatibility
 light_theme = ft.Theme(
-    color_scheme_seed=LIGHT_THEME_SEED_COLOR,
+    color_scheme=ft.ColorScheme(
+        primary=LightThemeColors.PRIMARY,
+        on_primary=LightThemeColors.ON_PRIMARY,
+        background=LightThemeColors.BACKGROUND,
+        on_background=LightThemeColors.ON_BACKGROUND,
+        surface=LightThemeColors.SURFACE,
+        on_surface=LightThemeColors.ON_SURFACE,
+        surface_variant=LightThemeColors.SURFACE_VARIANT,
+        on_surface_variant=LightThemeColors.ON_SURFACE_VARIANT,
+        secondary=LightThemeColors.SECONDARY,
+        on_secondary=LightThemeColors.ON_SECONDARY,
+        error=LightThemeColors.ERROR,
+        on_error=LightThemeColors.ON_ERROR,
+        outline=LightThemeColors.OUTLINE,
+    ),
     font_family=FONT_FAMILY_JOSEFIN_SANS,
     page_transitions=COMMON_PAGE_TRANSITIONS,
     text_theme=light_text_theme,

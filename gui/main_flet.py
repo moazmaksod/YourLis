@@ -88,7 +88,7 @@ def main(page: ft.Page):
         # Check if the view is cached
         if view_key not in cached_views:
             if view_key == "dashboard":
-                cached_views[view_key] = dashboard_view()
+                cached_views[view_key] = dashboard_view(page)
             elif view_key == "Stream":
                 cached_views[view_key] = stream_view(page)  # Pass the page parameter
             elif view_key == "patient":
@@ -142,7 +142,7 @@ def main(page: ft.Page):
     )
 
     # Load the initial view
-    current_view.controls.append(dashboard_view())
+    current_view.controls.append(dashboard_view(page))
 
     page.update()
 

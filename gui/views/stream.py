@@ -38,7 +38,7 @@ class MessageBubble(ft.Container):
                 no_wrap=False,
                 max_lines=None,
             ),
-            bgcolor=self.theme.color_scheme.surface_variant,
+            # bgcolor=self.theme.color_scheme.surface_variant,
             padding=10,
             border_radius=10,
             width=350,
@@ -84,11 +84,33 @@ class DeviceTab(ft.Container):
 
     def __init__(self, device_name: str, page: ft.Page, theme: ft.Theme):
         super().__init__(expand=True)
+        self.message_list = ft.ListView(
+            expand=True,
+            spacing=10,
+            padding=20,
+            auto_scroll=False,
+            on_scroll=self.on_list_scroll,
+        )
+        self.content = ft.Container(
+            content=self.message_list,
+            expand=True,
+            border=ft.border.all(1, theme.color_scheme.outline if hasattr(theme, 'color_scheme') and theme.color_scheme else ft.Colors.GREY_400),
+            border_radius=8,
+            padding=10,
+        )
         self.device_name = device_name
         self.page = page  # Still needed for checking if control is mounted
         self.theme = theme  # Store the passed theme object
         self.messages = []
         self.scroll_position = 0
+
+    def update_theme(self, new_theme):
+        self.theme = new_theme
+        if hasattr(self, "message_list") and getattr(self, "message_list", None) and getattr(self.message_list, "controls", None):
+            for i, msg in enumerate(self.messages):
+                if i < len(self.message_list.controls) and hasattr(self.message_list.controls[i], 'theme'):
+                    self.message_list.controls[i].theme = new_theme
+            self.update_messages(self.messages)
 
         self.message_list = ft.ListView(
             expand=True,
@@ -143,6 +165,12 @@ class CommunicationView(ft.Column):
     def __init__(self, page: ft.Page):
         super().__init__(expand=True)
         self.page = page
+        self.tabs = ft.Tabs(
+            selected_index=0,
+            animation_duration=300,
+            expand=True,
+            on_change=self.on_tab_change,
+        )
         self.running = False
         self.device_tabs = {}
         self.message_cutoff_times = {}
@@ -154,24 +182,27 @@ class CommunicationView(ft.Column):
             page.dark_theme if page.theme_mode == ft.ThemeMode.DARK else page.theme
         )
 
-        self.tabs = ft.Tabs(
-            selected_index=0,
-            animation_duration=300,
-            expand=True,
-            on_change=self.on_tab_change,
-        )
-
         self.controls = [self.tabs]
+
+    def update_all_tab_themes(self, new_theme):
+        for tab_info in self.device_tabs.values():
+            tab_info.content.update_theme(new_theme)
+        self.active_theme = new_theme
+        self.update()
 
     def did_mount(self):
         self.running = True
         self.page.run_task(self.update_loop)
         log_info("CommunicationView mounted, starting update loop.")
+        # Listen for theme changes and update all tabs
+        def on_theme_change(e):
+            new_theme = self.page.dark_theme if self.page.theme_mode == ft.ThemeMode.DARK else self.page.theme
+            self.update_all_tab_themes(new_theme)
+        self.page.on_theme_change = on_theme_change
 
     def will_unmount(self):
         self.running = False
-        self.device_tabs.clear()
-        self.message_cutoff_times.clear()
+        # Do NOT clear device_tabs or message_cutoff_times to persist tabs/messages across theme changes
         log_info("CommunicationView unmounted, stopping update loop.")
 
     def on_tab_change(self, e):
@@ -206,7 +237,7 @@ class CommunicationView(ft.Column):
 
     def get_device_tab(self, device_name: str, device_address: str) -> TabInfo:
         if device_address not in self.device_tabs:
-            # Pass the pre-determined active theme to the DeviceTab constructor.
+            # Always use only device_address as the key, not theme
             device_tab_content = DeviceTab(device_name, self.page, self.active_theme)
 
             new_tab_index = len(self.device_tabs) + 1
@@ -277,7 +308,11 @@ class CommunicationView(ft.Column):
                 if device_msgs:
                     device_name = device_msgs[-1]["client_name"]
                     tab_info = self.get_device_tab(device_name, client_address)
-                    if tab_info and tab_info.content.update_messages(device_msgs):
+                    # Only add truly new messages (by timestamp)
+                    existing_timestamps = set(msg["timestamp"] for msg in tab_info.content.messages)
+                    new_msgs = [msg for msg in device_msgs if msg["timestamp"] not in existing_timestamps]
+                    if new_msgs:
+                        tab_info.content.update_messages(tab_info.content.messages + new_msgs)
                         updated = True
             return updated
         except Exception as e:
