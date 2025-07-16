@@ -3,19 +3,45 @@ import datetime
 from gui.views.patient import fetch_patient_data, gui_time_format, sql_time_format
 from log.logger import log_error
 import asyncio
+
 # No need to import select_patient_ids_from_cbc anymore
 
-# Card color mapping by result state (will use theme at runtime)
-CARD_COLOR_KEYS = {
-    "Requested Only": ("error", "on_error"),      # Red
-    "Pending": ("secondary", "on_secondary"),     # Yellow/Accent
-    "Completed": ("primary", "on_primary"),       # Green/Primary
+# Explicit card color mapping for both light and dark mode
+CARD_COLORS = {
+    "Awaiting Test": {
+        "light": {"bg": ft.Colors.BLACK87, "fg": ft.Colors.WHITE},
+        "dark": {"bg": ft.Colors.BLACK87, "fg": ft.Colors.WHITE},
+    },
+    "Awaiting Review": {
+        "light": {"bg": ft.Colors.YELLOW_400, "fg": ft.Colors.BLACK},
+        "dark": {"bg": ft.Colors.YELLOW_700, "fg": ft.Colors.BLACK},
+    },
+    "Completed": {
+        "light": {"bg": ft.Colors.GREEN_400, "fg": ft.Colors.WHITE},
+        "dark": {"bg": ft.Colors.GREEN_700, "fg": ft.Colors.WHITE},
+    },
+}
+
+# Card hover color mapping for both light and dark mode
+CARD_HOVER_COLORS = {
+    "Awaiting Test": {
+        "light": ft.Colors.GREY_700,
+        "dark": ft.Colors.GREY_900,
+    },
+    "Awaiting Review": {
+        "light": ft.Colors.YELLOW_200,
+        "dark": ft.Colors.YELLOW_800,
+    },
+    "Completed": {
+        "light": ft.Colors.GREEN_200,
+        "dark": ft.Colors.GREEN_900,
+    },
 }
 
 # Group mapping
 GROUP_LABELS = [
-    ("Requested Only", "Requested Only (No CBC Record)"),
-    ("Pending", "Pending (CBC Received)"),
+    ("Awaiting Test", "Awaiting Test"),
+    ("Awaiting Review", "Awaiting Review"),
     ("Completed", "Completed"),
 ]
 
@@ -24,23 +50,58 @@ CBC_IDS_SQL = "SELECT DISTINCT [Patient ID] FROM cbc WHERE [Requested Date]=?"
 
 
 def dashboard_view(page: ft.Page):
-    today = datetime.date.today()
-    today_str = today.strftime(gui_time_format)
+    # Restore date from page attribute if available
+    if hasattr(page, "dashboard_date"):
+        selected_date = page.dashboard_date
+    else:
+        selected_date = datetime.date.today()
+        page.dashboard_date = selected_date
+    selected_date_str = selected_date.strftime(gui_time_format)
 
     # Date picker
-    date_field = ft.TextField(value=today_str, width=120, disabled=True)
+    date_field = ft.TextField(value=selected_date_str, width=120, disabled=True)
+
+    def update_date_field(new_date):
+        page.dashboard_date = new_date
+        date_field.value = new_date.strftime(gui_time_format)
+        date_field.update()
+        page.run_task(load_cards)
+
+    def on_prev_day(e):
+        current_date = datetime.datetime.strptime(
+            date_field.value, gui_time_format
+        ).date()
+        prev_date = current_date - datetime.timedelta(days=1)
+        update_date_field(prev_date)
+
+    def on_next_day(e):
+        current_date = datetime.datetime.strptime(
+            date_field.value, gui_time_format
+        ).date()
+        next_date = current_date + datetime.timedelta(days=1)
+        update_date_field(next_date)
 
     def on_date_change(e):
         if e.control.value:
-            date_field.value = e.control.value.strftime(gui_time_format)
-            date_field.update()
-            page.run_task(load_cards)
+            update_date_field(e.control.value)
 
     date_picker = ft.DatePicker(
         first_date=datetime.date(2000, 1, 1),
         last_date=datetime.date(2060, 12, 31),
-        current_date=today,
+        current_date=selected_date,
         on_change=on_date_change,
+    )
+    prev_day_btn = ft.ElevatedButton(
+        text="<<",
+        on_click=on_prev_day,
+        height=40,
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
+    )
+    next_day_btn = ft.ElevatedButton(
+        text=">>",
+        on_click=on_next_day,
+        height=40,
+        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
     )
     date_picker_btn = ft.ElevatedButton(
         text="Select Date",
@@ -51,7 +112,10 @@ def dashboard_view(page: ft.Page):
 
     # Container for cards
     card_groups = {k: [] for k, _ in GROUP_LABELS}
-    cards_column = ft.Column([])
+    cards_column = ft.Column(
+        [],
+        expand=True,
+    )
 
     async def load_cards():
         page.splash = ft.ProgressBar(visible=True)
@@ -59,17 +123,27 @@ def dashboard_view(page: ft.Page):
         try:
             # Convert date to SQL format
             date_val = date_field.value
-            date_sql = datetime.datetime.strptime(date_val, gui_time_format).strftime(
-                sql_time_format
-            )
-            # Fetch all patients for the selected date
-            patients = await fetch_patient_data(start_date=date_sql, end_date=date_sql)
-            if hasattr(patients, "__await__") or hasattr(
-                patients, "send"
-            ):  # is coroutine
-                patients = await patients
-            if patients is None:
-                patients = []
+            date_sql = datetime.datetime.strptime(date_val, gui_time_format).strftime(sql_time_format)
+            # Use cached patients if available and date matches
+            if hasattr(page, "dashboard_patients") and hasattr(page, "dashboard_patients_date"):
+                if page.dashboard_patients_date == date_val:
+                    patients = page.dashboard_patients
+                else:
+                    patients = await fetch_patient_data(start_date=date_sql, end_date=date_sql)
+                    if hasattr(patients, "__await__") or hasattr(patients, "send"):
+                        patients = await patients
+                    if patients is None:
+                        patients = []
+                    page.dashboard_patients = patients
+                    page.dashboard_patients_date = date_val
+            else:
+                patients = await fetch_patient_data(start_date=date_sql, end_date=date_sql)
+                if hasattr(patients, "__await__") or hasattr(patients, "send"):
+                    patients = await patients
+                if patients is None:
+                    patients = []
+                page.dashboard_patients = patients
+                page.dashboard_patients_date = date_val
             # Group patients by result state and CBC existence
             for k, _ in GROUP_LABELS:
                 card_groups[k] = []
@@ -82,52 +156,57 @@ def dashboard_view(page: ft.Page):
                 cbc_exists = int(cbc_exists) == 1
                 # Group logic
                 if is_pending and not cbc_exists:
-                    group = "Requested Only"
+                    group = "Awaiting Test"
                 elif is_pending and cbc_exists:
-                    group = "Pending"
+                    group = "Awaiting Review"
                 elif is_completed and cbc_exists:
                     group = "Completed"
                 else:
-                    group = "Requested Only"  # fallback
+                    group = "Awaiting Test"  # fallback
+
                 # Get theme colors robustly
-                theme = page.theme if page.theme_mode == ft.ThemeMode.LIGHT else page.dark_theme
-                color_key, text_key = CARD_COLOR_KEYS[group]
-                color_scheme = getattr(theme, "color_scheme", None)
-                if color_scheme:
-                    card_bg = getattr(color_scheme, color_key)
-                    card_fg = getattr(color_scheme, text_key)
-                else:
-                    fallback_colors = {
-                        "error": ft.Colors.RED_200,
-                        "on_error": ft.Colors.BLACK,
-                        "secondary": ft.Colors.YELLOW_200,
-                        "on_secondary": ft.Colors.BLACK,
-                        "primary": ft.Colors.GREEN_200,
-                        "on_primary": ft.Colors.BLACK,
-                    }
-                    card_bg = fallback_colors.get(color_key, ft.Colors.GREY_200)
-                    card_fg = fallback_colors.get(text_key, ft.Colors.BLACK)
+                theme = (
+                    page.theme
+                    if page.theme_mode == ft.ThemeMode.LIGHT
+                    else page.dark_theme
+                )
+                # Use explicit color mapping for light/dark mode
+                mode = "dark" if page.theme_mode == ft.ThemeMode.DARK else "light"
+                card_bg = CARD_COLORS[group][mode]["bg"]
+                card_fg = CARD_COLORS[group][mode]["fg"]
+                card_info = (
+                    f"Name: {patient.get('Name', '')}\n"
+                    f"ID: {patient.get('Patient ID', '')}\n"
+                    f"Requested Test: {patient.get('Requested Test', '')}\n"
+                    f"Sample State: {group}"
+                )
+                card_hover = CARD_HOVER_COLORS[group][mode]
+                # Use a mutable container to allow dynamic bgcolor change
+                def on_card_hover(e):
+                    e.control.bgcolor = card_hover if e.data == "true" else card_bg
+                    e.control.update()
                 card = ft.Container(
-                    content=ft.Column(
-                        [
-                            ft.Text(
-                                f"Name: {patient.get('Name', '')}",
-                                weight=ft.FontWeight.BOLD,
-                                color=card_fg,
-                            ),
-                            ft.Text(f"ID: {patient.get('Patient ID', '')}", color=card_fg),
-                            ft.Text(
-                                f"Requested Test: {patient.get('Requested Test', '')}", color=card_fg
-                            ),
-                            ft.Text(f"Result State: {group}", color=card_fg),
-                        ],
-                        spacing=2,
+                    content=ft.TextField(
+                        value=card_info,
+                        read_only=True,
+                        multiline=True,
+                        border_radius=10,
+                        bgcolor=card_bg,
+                        color=card_fg,
+                        border_color=card_bg,
+                        cursor_color=card_fg,
+                        text_size=14,
+                        min_lines=4,
+                        max_lines=8,
+                        expand=False,
                     ),
                     bgcolor=card_bg,
                     border_radius=10,
                     padding=15,
                     margin=5,
                     width=300,
+                    ink=True,
+                    on_hover=on_card_hover,
                 )
                 card_groups[group].append(card)
             # Build the grouped cards
@@ -158,15 +237,22 @@ def dashboard_view(page: ft.Page):
             [
                 ft.Row(
                     [
-                        ft.Text("Dashboard", size=24, weight=ft.FontWeight.BOLD),
                         ft.Container(width=20),
                         date_picker_btn,
+                        prev_day_btn,
                         date_field,
+                        next_day_btn,
                     ],
                     spacing=10,
                 ),
-                ft.Divider(),
-                cards_column,
+                ft.Column(
+                    [
+                        ft.Divider(),
+                        cards_column,
+                    ],
+                    expand=True,
+                    scroll="auto",
+                ),
             ],
             expand=True,
         ),
