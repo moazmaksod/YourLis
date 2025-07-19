@@ -2,21 +2,30 @@ import flet as ft
 import datetime
 from gui.views.patient import fetch_patient_data, gui_time_format, sql_time_format
 from log.logger import log_error
-import asyncio
 
-# No need to import select_patient_ids_from_cbc anymore
+# Internal group keys
+GROUP_AWAITING_ANALYSIS = "awaiting_analysis"
+GROUP_UNDER_REVIEW = "under_review"
+GROUP_FINALIZED = "finalized"
+
+# Mapping internal keys to user-friendly display labels
+GROUP_LABELS = {
+    GROUP_AWAITING_ANALYSIS: "Waiting for Analysis",
+    GROUP_UNDER_REVIEW: "Under Review",
+    GROUP_FINALIZED: "Report Finalized",
+}
 
 # Explicit card color mapping for both light and dark mode
 CARD_COLORS = {
-    "Awaiting Test": {
-        "light": {"bg": ft.Colors.BLACK87, "fg": ft.Colors.WHITE},
-        "dark": {"bg": ft.Colors.BLACK87, "fg": ft.Colors.WHITE},
+    GROUP_AWAITING_ANALYSIS: {
+        "light": {"bg": ft.Colors.BLACK38, "fg": ft.Colors.WHITE},
+        "dark": {"bg": ft.Colors.BLACK38, "fg": ft.Colors.WHITE},
     },
-    "Awaiting Review": {
+    GROUP_UNDER_REVIEW: {
         "light": {"bg": ft.Colors.YELLOW_400, "fg": ft.Colors.BLACK},
         "dark": {"bg": ft.Colors.YELLOW_700, "fg": ft.Colors.BLACK},
     },
-    "Completed": {
+    GROUP_FINALIZED: {
         "light": {"bg": ft.Colors.GREEN_400, "fg": ft.Colors.WHITE},
         "dark": {"bg": ft.Colors.GREEN_700, "fg": ft.Colors.WHITE},
     },
@@ -24,29 +33,19 @@ CARD_COLORS = {
 
 # Card hover color mapping for both light and dark mode
 CARD_HOVER_COLORS = {
-    "Awaiting Test": {
+    GROUP_AWAITING_ANALYSIS: {
         "light": ft.Colors.GREY_700,
         "dark": ft.Colors.GREY_900,
     },
-    "Awaiting Review": {
+    GROUP_UNDER_REVIEW: {
         "light": ft.Colors.YELLOW_200,
         "dark": ft.Colors.YELLOW_800,
     },
-    "Completed": {
+    GROUP_FINALIZED: {
         "light": ft.Colors.GREEN_200,
         "dark": ft.Colors.GREEN_900,
     },
 }
-
-# Group mapping
-GROUP_LABELS = [
-    ("Awaiting Test", "Awaiting Test"),
-    ("Awaiting Review", "Awaiting Review"),
-    ("Completed", "Completed"),
-]
-
-# SQL to get all CBC patient IDs for a date
-CBC_IDS_SQL = "SELECT DISTINCT [Patient ID] FROM cbc WHERE [Requested Date]=?"
 
 
 def dashboard_view(page: ft.Page):
@@ -111,7 +110,7 @@ def dashboard_view(page: ft.Page):
     )
 
     # Container for cards
-    card_groups = {k: [] for k, _ in GROUP_LABELS}
+    card_groups = {k: [] for k in GROUP_LABELS.keys()}
     cards_column = ft.Column(
         [],
         expand=True,
@@ -123,13 +122,19 @@ def dashboard_view(page: ft.Page):
         try:
             # Convert date to SQL format
             date_val = date_field.value
-            date_sql = datetime.datetime.strptime(date_val, gui_time_format).strftime(sql_time_format)
+            date_sql = datetime.datetime.strptime(date_val, gui_time_format).strftime(
+                sql_time_format
+            )
             # Use cached patients if available and date matches
-            if hasattr(page, "dashboard_patients") and hasattr(page, "dashboard_patients_date"):
+            if hasattr(page, "dashboard_patients") and hasattr(
+                page, "dashboard_patients_date"
+            ):
                 if page.dashboard_patients_date == date_val:
                     patients = page.dashboard_patients
                 else:
-                    patients = await fetch_patient_data(start_date=date_sql, end_date=date_sql)
+                    patients = await fetch_patient_data(
+                        start_date=date_sql, end_date=date_sql
+                    )
                     if hasattr(patients, "__await__") or hasattr(patients, "send"):
                         patients = await patients
                     if patients is None:
@@ -137,7 +142,9 @@ def dashboard_view(page: ft.Page):
                     page.dashboard_patients = patients
                     page.dashboard_patients_date = date_val
             else:
-                patients = await fetch_patient_data(start_date=date_sql, end_date=date_sql)
+                patients = await fetch_patient_data(
+                    start_date=date_sql, end_date=date_sql
+                )
                 if hasattr(patients, "__await__") or hasattr(patients, "send"):
                     patients = await patients
                 if patients is None:
@@ -145,24 +152,29 @@ def dashboard_view(page: ft.Page):
                 page.dashboard_patients = patients
                 page.dashboard_patients_date = date_val
             # Group patients by result state and CBC existence
-            for k, _ in GROUP_LABELS:
+            for k in GROUP_LABELS.keys():
                 card_groups[k] = []
+
             for patient in patients:
-                result_state = patient.get("Result State", 0)  # 'Pending' or 'Completed'
+                result_state = patient.get(
+                    "Result State", 0
+                )  # 'Pending' or 'Completed'
                 cbc_exists = patient.get("CBC_Exists", 0)  # 1 or 0
                 # Normalize values
                 is_pending = str(result_state).lower() == "pending" or result_state == 0
-                is_completed = str(result_state).lower() == "completed" or result_state == 1
+                is_completed = (
+                    str(result_state).lower() == "completed" or result_state == 1
+                )
                 cbc_exists = int(cbc_exists) == 1
                 # Group logic
                 if is_pending and not cbc_exists:
-                    group = "Awaiting Test"
+                    group = GROUP_AWAITING_ANALYSIS
                 elif is_pending and cbc_exists:
-                    group = "Awaiting Review"
+                    group = GROUP_UNDER_REVIEW
                 elif is_completed and cbc_exists:
-                    group = "Completed"
+                    group = GROUP_FINALIZED
                 else:
-                    group = "Awaiting Test"  # fallback
+                    group = GROUP_AWAITING_ANALYSIS  # fallback
 
                 # Get theme colors robustly
                 theme = (
@@ -170,7 +182,6 @@ def dashboard_view(page: ft.Page):
                     if page.theme_mode == ft.ThemeMode.LIGHT
                     else page.dark_theme
                 )
-                # Use explicit color mapping for light/dark mode
                 mode = "dark" if page.theme_mode == ft.ThemeMode.DARK else "light"
                 card_bg = CARD_COLORS[group][mode]["bg"]
                 card_fg = CARD_COLORS[group][mode]["fg"]
@@ -178,15 +189,22 @@ def dashboard_view(page: ft.Page):
                     f"Name: {patient.get('Name', '')}\n"
                     f"ID: {patient.get('Patient ID', '')}\n"
                     f"Requested Test: {patient.get('Requested Test', '')}\n"
-                    f"Sample State: {group}"
+                    f"Sample State: {GROUP_LABELS[group]}"
                 )
                 card_hover = CARD_HOVER_COLORS[group][mode]
+
                 # Use a mutable container to allow dynamic bgcolor change
                 def on_card_hover(e):
                     e.control.bgcolor = card_hover if e.data == "true" else card_bg
                     e.control.update()
-                card = ft.Container(
-                    content=ft.TextField(
+
+                # Add View Result button if CBC exists
+                async def view_results_click(e, patient_id=patient.get("Patient ID")):
+                    from gui.views.cbc_report import cbc_report_view
+                    await cbc_report_view(page, patient_id)
+
+                card_content = [
+                    ft.TextField(
                         value=card_info,
                         read_only=True,
                         multiline=True,
@@ -199,7 +217,19 @@ def dashboard_view(page: ft.Page):
                         min_lines=4,
                         max_lines=8,
                         expand=False,
-                    ),
+                    )
+                ]
+                if cbc_exists:
+                    card_content.append(
+                        ft.ElevatedButton(
+                            text="View Result",
+                            on_click=view_results_click,
+                            height=40,
+                            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
+                        )
+                    )
+                card = ft.Container(
+                    content=ft.Column(card_content, expand=True),
                     bgcolor=card_bg,
                     border_radius=10,
                     padding=15,
@@ -209,15 +239,17 @@ def dashboard_view(page: ft.Page):
                     on_hover=on_card_hover,
                 )
                 card_groups[group].append(card)
+
             # Build the grouped cards
             cards_column.controls = []
-            for k, label in GROUP_LABELS:
-                group_cards = card_groups[k]
+            for group_key, group_label in GROUP_LABELS.items():
+                group_cards = card_groups[group_key]
                 if group_cards:
                     cards_column.controls.append(
-                        ft.Text(label, size=18, weight=ft.FontWeight.BOLD)
+                        ft.Text(group_label, size=18, weight=ft.FontWeight.BOLD)
                     )
                     cards_column.controls.append(ft.Row(group_cards, wrap=True))
+
             page.update()
         except Exception as e:
             log_error(f"Dashboard load_cards error: {e}")
