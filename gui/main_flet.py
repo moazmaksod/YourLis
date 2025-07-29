@@ -12,7 +12,6 @@ from gui.views.stream import stream_view
 from gui.views.patient import patient_view
 from gui.views.settings import settings_view
 from gui.views.about import about_view
-from gui.views.report import report_view
 from gui.theme import get_app_themes, app_fonts  # Import themes and fonts
 
 from setting.config import get_config
@@ -76,9 +75,8 @@ def main(page: ft.Page):
             0: "dashboard",
             1: "Stream",
             2: "patient",
-            3: "report",
-            4: "settings",
-            5: "about",
+            3: "settings",
+            4: "about",
         }
 
         view_key = views_map.get(selected)
@@ -93,8 +91,6 @@ def main(page: ft.Page):
                 cached_views[view_key] = stream_view(page)  # Pass the page parameter
             elif view_key == "patient":
                 cached_views[view_key] = patient_view(page)
-            elif view_key == "report":
-                cached_views[view_key] = report_view()
             elif view_key == "settings":
                 cached_views[view_key] = settings_view(page)
             elif view_key == "about":

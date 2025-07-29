@@ -121,10 +121,7 @@ def side_menu(on_item_click):
                 ft.NavigationRailDestination(
                     icon=ft.Icon(ft.Icons.GROUPS_SHARP), label="patient"
                 ),
-                ft.NavigationRailDestination(
-                    icon=ft.Icon(ft.Icons.INSERT_CHART_ROUNDED), label="Reports"
-                ),
-                ft.NavigationRailDestination(
+                                ft.NavigationRailDestination(
                     icon=ft.Icon(ft.Icons.SETTINGS), label="Settings"
                 ),
                 ft.NavigationRailDestination(
