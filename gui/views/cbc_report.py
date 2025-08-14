@@ -221,24 +221,46 @@ async def cbc_report_view(page: ft.Page, patient_id):
                             and all(isinstance(x, (int, float)) for x in normal_range)
                         ):
                             min_v, max_v = normal_range
-                            if min_v == max_v:
-                                return ""  # Avoid division by zero
-                            percent = (v - min_v) / (max_v - min_v)
+                            # Bar span covers min_v/max_v and outlier value, with margin
+                            span = max_v - min_v if max_v != min_v else 1.0
+                            margin = span * 0.15 or 1.0
+                            # ALWAYS symmetric yellow/red (buffer) for best visualization
+                            if v < min_v:
+                                buf = max((min_v - v), 0) + margin
+                                min_bar = min_v - buf
+                                max_bar = max_v + buf
+                            elif v > max_v:
+                                buf = max((v - max_v), 0) + margin
+                                min_bar = min_v - buf
+                                max_bar = max_v + buf
+                            else:
+                                min_bar = min_v - margin
+                                max_bar = max_v + margin
+                            if min_bar == max_bar:
+                                max_bar = min_bar + 1.0
+                            # Ensure value is never at the left/right edge
+                            total_span = max_bar - min_bar
+                            pad = total_span * 0.075  # 7.5% of bar on each side
+                            min_bar -= pad
+                            max_bar += pad
+                            percent = (v - min_bar) / (max_bar - min_bar)
                             percent = max(0, min(1, percent))
-                            color = (
-                                "#388e3c"
-                                if min_v <= v <= max_v
-                                else (
-                                    "#d32f2f" if v < min_v or v > max_v else "#fbc02d"
-                                )
-                            )
-                            return f"""
-                            <div style='position:relative;width:90px;height:14px;background:#eee;border-radius:6px;display:inline-block;vertical-align:middle;'>
-                                <div style='position:absolute;left:0;top:0;height:100%;width:100%;background:linear-gradient(90deg,#e0e0e0 0%,#fafafa 100%);border-radius:6px;'></div>
-                                <div style='position:absolute;left:0;top:0;height:100%;width:{percent*100:.1f}%;background:{color};border-radius:6px;'></div>
-                                <div style='position:absolute;left:{percent*100:.1f}%;top:0;width:2px;height:100%;background:#222;'></div>
+                            # Locations for regions
+                            yellow_perc = (min_v - min_bar) / (max_bar - min_bar)
+                            green_perc = (max_v - min_bar) / (max_bar - min_bar)
+                            # Clamp percents
+                            yellow_perc = max(0, min(1, yellow_perc))
+                            green_perc = max(0, min(1, green_perc))
+                            # HTML bar sections
+                            bar_html = f"""
+                            <div style='position:relative;width:90px;height:14px;background:#eee;border-radius:2px;border:1.5px solid #222;display:inline-block;vertical-align:middle;'>
+                                <div style='position:absolute;left:0;top:0;height:100%;width:{yellow_perc*100:.1f}%;background:#fbc02d;'></div>
+                                <div style='position:absolute;left:{yellow_perc*100:.1f}%;top:0;height:100%;width:{(green_perc-yellow_perc)*100:.1f}%;background:#388e3c;'></div>
+                                <div style='position:absolute;left:{green_perc*100:.1f}%;top:0;height:100%;width:{(1-green_perc)*100:.1f}%;background:#d32f2f;'></div>
+                                <div style='position:absolute;left:calc({percent*100:.1f}% - 5px);top:0;width:0;height:0;border-left:5.25px solid transparent;border-right:5.25px solid transparent;border-top:6px solid #222;z-index:3;'></div>
                             </div>
                             """
+                            return bar_html
                         else:
                             return ""
                     except Exception:
@@ -256,12 +278,13 @@ async def cbc_report_view(page: ft.Page, patient_id):
                             min_v, max_v = normal_range
                             if min_v == max_v:
                                 return "#222"
+                            if v < min_v:
+                                return "#fbc02d"  # yellow for low
                             if min_v <= v <= max_v:
-                                return "#388e3c"
-                            elif v < min_v or v > max_v:
-                                return "#d32f2f"
-                            else:
-                                return "#fbc02d"
+                                return "#388e3c"  # green for normal
+                            if v > max_v:
+                                return "#d32f2f"  # red for high
+                            return "#222"
                         else:
                             return "#222"
                     except Exception:
@@ -320,17 +343,18 @@ async def cbc_report_view(page: ft.Page, patient_id):
                     body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #222; }}
                     .container {{
                         width: 210mm;
-                        height: 297mm;
+                        min-height: 297mm;
                         margin: 0 auto;
                         padding: 0;
                         border-radius: 16px;
                         background: #fff;
-                        box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+                        /* box-shadow: 0 4px 24px rgba(0,0,0,0.10); */
                         box-sizing: border-box;
                         display: flex;
                         flex-direction: column;
                         justify-content: flex-start;
-                        overflow: hidden;
+                        overflow: visible;
+                        page-break-after: always;
                     }}
                     .header-bar {{
                         background: linear-gradient(90deg, #b71c1c 60%, #1976d2 100%);
@@ -433,7 +457,7 @@ async def cbc_report_view(page: ft.Page, patient_id):
                 </style>
             </head>
             <body>
-                <div class=\"container\">
+                                <div class=\"container\">
                     <div class=\"header-bar\"></div>
                     <div class=\"header-content\">
                         <div class=\"logo\">🩺</div>
