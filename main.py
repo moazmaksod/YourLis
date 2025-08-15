@@ -14,6 +14,7 @@ def generate_dynamic_port(api_ip):
     Bind to an available port and return it for FastAPI server use.
     """
     import socket
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((api_ip, 0))
         _, port = s.getsockname()
@@ -25,7 +26,9 @@ def run_fastapi(api_ip, port):
     Start the FastAPI server on the given IP and port.
     """
     import uvicorn
-    uvicorn.run("api.app:app", host=api_ip, port=port)
+    from api.app import app
+
+    uvicorn.run(app, host=api_ip, port=port, log_config=None)
 
 
 def run_flet():
@@ -52,7 +55,9 @@ def wait_for_fastapi_server(api_ip, port, timeout=15, interval=0.5):
         except Exception as e:
             log_info(f"FastAPI server not available yet: {e}")
         time.sleep(interval)
-    log_error(f"FastAPI server did not become available at {status_url} within {timeout} seconds.")
+    log_error(
+        f"FastAPI server did not become available at {status_url} within {timeout} seconds."
+    )
     return False
 
 
@@ -61,11 +66,24 @@ def patch_api_methods_base_url(api_ip, port):
     Patch gui.api_methods.api_base_url to use the correct dynamic port.
     """
     import gui.api_methods as api_methods
+
     api_methods.api_base_url = f"http://{api_ip}:{port}"
     return api_methods.start_server
 
 
+from setting.user_manager import ensure_initial_user
+
 def main():
+    # Ensure required folders exist
+    import os
+
+    # Ensure user setup on first run
+    ensure_initial_user()
+
+    for folder in ["assets", "setting"]:
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
     # Load config and pre-startup checks
     cfg = get_config()
     api_ip = cfg["API_IP"]
@@ -89,14 +107,18 @@ def main():
     if cfg.get("AUTO_START_CBC_SERVER", True):
         if wait_for_fastapi_server(api_ip, port):
             try:
-                log_info("Attempting to auto start CBC server (calling start_server)...")
+                log_info(
+                    "Attempting to auto start CBC server (calling start_server)..."
+                )
                 cbc_start_server_dynamic = patch_api_methods_base_url(api_ip, port)
                 result = asyncio.run(cbc_start_server_dynamic())
                 log_info(f"CBC server start_server() result: {result}")
             except Exception as e:
                 log_error(f"Failed to auto start CBC server: {e}")
         else:
-            log_error("CBC server not started because FastAPI server was not available.")
+            log_error(
+                "CBC server not started because FastAPI server was not available."
+            )
 
     # Wait for the Flet GUI process to finish
     try:
@@ -110,4 +132,6 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
+    multiprocessing.set_start_method("spawn")
     main()

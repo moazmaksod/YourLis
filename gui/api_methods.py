@@ -2,10 +2,13 @@ import httpx
 from setting.config import get_config
 from log.logger import log_info, log_error
 
+api_base_url = None
+
+
 def get_api_base_url():
     cfg = get_config()
-    api_port = cfg['API_PORT']
-    api_ip = cfg['API_IP']
+    api_port = cfg["API_PORT"]
+    api_ip = cfg["API_IP"]
     url = f"http://{api_ip}:{api_port}"
     log_info(f"[API_METHODS] Using api_base_url: {url}")
     return url
@@ -20,11 +23,17 @@ async def fetch_server_status():
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(url)
-            log_info(f"[API_METHODS] Response: status={response.status_code}, body={response.text}")
+            log_info(
+                f"[API_METHODS] Response: status={response.status_code}, body={response.text}"
+            )
             if response.status_code == 200:
                 return response.json()
             else:
-                return {"state": "Error", "text": "Failed to fetch server status", "clients": {}}
+                return {
+                    "state": "Error",
+                    "text": "Failed to fetch server status",
+                    "clients": {},
+                }
     except Exception as e:
         log_error(f"[API_METHODS] Exception in fetch_server_status: {e}")
         return {"state": "Error", "text": str(e), "clients": {}}
@@ -39,7 +48,9 @@ async def fetch_communication_messages():
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(url)
-            log_info(f"[API_METHODS] Response: status={response.status_code}, body={response.text}")
+            log_info(
+                f"[API_METHODS] Response: status={response.status_code}, body={response.text}"
+            )
             if response.status_code == 200:
                 return response.json()
             else:
@@ -59,7 +70,9 @@ async def toggle_server_state(current_state):
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(url)
-            log_info(f"[API_METHODS] Response: status={response.status_code}, body={response.text}")
+            log_info(
+                f"[API_METHODS] Response: status={response.status_code}, body={response.text}"
+            )
             return response.json()
     except Exception as e:
         log_error(f"[API_METHODS] Exception in toggle_server_state: {e}")
@@ -76,14 +89,18 @@ async def stop_server():
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(url)
-            log_info(f"[API_METHODS] Response: status={response.status_code}, body={response.text}")
+            log_info(
+                f"[API_METHODS] Response: status={response.status_code}, body={response.text}"
+            )
             return response.json()
-        
+
     except Exception as e:
         log_error(f"[API_METHODS] Exception in stop_server: {e}")
         return {"message": str(e)}
-    
+
+
 from log.logger import log_info, log_error
+
 
 async def start_server():
     """
@@ -95,9 +112,11 @@ async def start_server():
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(url)
-            log_info(f"[API_METHODS] CBC server /server/start response: status={response.status_code}, body={response.text}")
+            log_info(
+                f"[API_METHODS] CBC server /server/start response: status={response.status_code}, body={response.text}"
+            )
             return response.json()
-        
+
     except Exception as e:
         log_error(f"[API_METHODS] Exception in start_server: {e}")
         return {"message": str(e)}

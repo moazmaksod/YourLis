@@ -59,7 +59,9 @@ def main(page: ft.Page):
     page.window.prevent_close = True
     page.window.on_event = handle_window_event
 
+    # --- ROLLBACK: USE STATIC LOGIN ---
     login_dialog(page)
+    # Below is the old app rendering logic (no login gating needed)
 
     # Navigation state
     current_view = ft.Column(expand=True)
