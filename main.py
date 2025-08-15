@@ -71,14 +71,9 @@ def patch_api_methods_base_url(api_ip, port):
     return api_methods.start_server
 
 
-from setting.user_manager import ensure_initial_user
-
 def main():
     # Ensure required folders exist
     import os
-
-    # Ensure user setup on first run
-    ensure_initial_user()
 
     for folder in ["assets", "setting"]:
         if not os.path.exists(folder):

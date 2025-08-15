@@ -49,24 +49,24 @@ CARD_HOVER_COLORS = {
 
 
 def dashboard_view(page: ft.Page):
-    # Restore date from page attribute if available
-    if hasattr(page, "dashboard_date"):
-        selected_date = page.dashboard_date
-    else:
-        selected_date = datetime.date.today()
-        page.dashboard_date = selected_date
+    # Use a local state dictionary instead of custom page attributes
+    state = {}
+    selected_date = datetime.date.today()
+    state["dashboard_date"] = selected_date
     selected_date_str = selected_date.strftime(gui_time_format)
 
     # Date picker
     date_field = ft.TextField(value=selected_date_str, width=120, disabled=True)
 
     def update_date_field(new_date):
-        page.dashboard_date = new_date
+        state["dashboard_date"] = new_date
         date_field.value = new_date.strftime(gui_time_format)
         date_field.update()
         page.run_task(load_cards)
 
     def on_prev_day(e):
+        if not date_field.value:
+            return
         current_date = datetime.datetime.strptime(
             date_field.value, gui_time_format
         ).date()
@@ -74,6 +74,8 @@ def dashboard_view(page: ft.Page):
         update_date_field(prev_date)
 
     def on_next_day(e):
+        if not date_field.value:
+            return
         current_date = datetime.datetime.strptime(
             date_field.value, gui_time_format
         ).date()
@@ -117,40 +119,37 @@ def dashboard_view(page: ft.Page):
     )
 
     async def load_cards():
-        page.splash = ft.ProgressBar(visible=True)
+        # Helper to resolve coroutine to final result
+        async def resolve_patients(result):
+            while hasattr(result, "__await__"):
+                result = await result
+            return result
+
         page.update()
         try:
             # Convert date to SQL format
-            date_val = date_field.value
+            date_val = date_field.value or ""
             date_sql = datetime.datetime.strptime(date_val, gui_time_format).strftime(
                 sql_time_format
             )
-            # Use cached patients if available and date matches
-            if hasattr(page, "dashboard_patients") and hasattr(
-                page, "dashboard_patients_date"
-            ):
-                if page.dashboard_patients_date == date_val:
-                    patients = page.dashboard_patients
+            # Use local state for caching
+            if "dashboard_patients" in state and "dashboard_patients_date" in state:
+                if state["dashboard_patients_date"] == date_val:
+                    patients = state["dashboard_patients"]
                 else:
-                    patients = await fetch_patient_data(
-                        start_date=date_sql, end_date=date_sql
-                    )
-                    if hasattr(patients, "__await__") or hasattr(patients, "send"):
-                        patients = await patients
+                    result = fetch_patient_data(start_date=date_sql, end_date=date_sql)
+                    patients = await resolve_patients(result)
                     if patients is None:
                         patients = []
-                    page.dashboard_patients = patients
-                    page.dashboard_patients_date = date_val
+                    state["dashboard_patients"] = patients
+                    state["dashboard_patients_date"] = date_val
             else:
-                patients = await fetch_patient_data(
-                    start_date=date_sql, end_date=date_sql
-                )
-                if hasattr(patients, "__await__") or hasattr(patients, "send"):
-                    patients = await patients
+                result = fetch_patient_data(start_date=date_sql, end_date=date_sql)
+                patients = await resolve_patients(result)
                 if patients is None:
                     patients = []
-                page.dashboard_patients = patients
-                page.dashboard_patients_date = date_val
+                state["dashboard_patients"] = patients
+                state["dashboard_patients_date"] = date_val
             # Group patients by result state and CBC existence
             for k in GROUP_LABELS.keys():
                 card_groups[k] = []
@@ -177,11 +176,6 @@ def dashboard_view(page: ft.Page):
                     group = GROUP_AWAITING_ANALYSIS  # fallback
 
                 # Get theme colors robustly
-                theme = (
-                    page.theme
-                    if page.theme_mode == ft.ThemeMode.LIGHT
-                    else page.dark_theme
-                )
                 mode = "dark" if page.theme_mode == ft.ThemeMode.DARK else "light"
                 card_bg = CARD_COLORS[group][mode]["bg"]
                 card_fg = CARD_COLORS[group][mode]["fg"]
@@ -201,9 +195,10 @@ def dashboard_view(page: ft.Page):
                 # Add View Result button if CBC exists
                 async def view_results_click(e, patient_id=patient.get("Patient ID")):
                     from gui.views.cbc_report import cbc_report_view
+
                     await cbc_report_view(page, patient_id)
 
-                card_content = [
+                card_content: list = [
                     ft.TextField(
                         value=card_info,
                         read_only=True,
@@ -220,14 +215,17 @@ def dashboard_view(page: ft.Page):
                     )
                 ]
                 if cbc_exists:
-                    card_content.append(
-                        ft.ElevatedButton(
-                            text="View Result",
-                            on_click=view_results_click,
-                            height=40,
-                            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
-                        )
+                    # Add View Result button only if CBC exists
+                    view_result_btn = ft.ElevatedButton(
+                        text="View Result",
+                        on_click=view_results_click,
+                        height=40,
+                        style=ft.ButtonStyle(
+                            shape=ft.RoundedRectangleBorder(radius=10)
+                        ),
                     )
+                    card_content.append(view_result_btn)
+
                 card = ft.Container(
                     content=ft.Column(card_content, expand=True),
                     bgcolor=card_bg,
@@ -253,12 +251,12 @@ def dashboard_view(page: ft.Page):
             page.update()
         except Exception as e:
             log_error(f"Dashboard load_cards error: {e}")
-            page.snack_bar = ft.SnackBar(
-                ft.Text("Error loading dashboard: " + str(e)), open=True
-            )
+            # page.snack_bar = ft.SnackBar(
+            #     ft.Text("Error loading dashboard: " + str(e)), open=True
+            # )  # Commented: not a valid Page attribute
             page.update()
         finally:
-            page.splash = None
+            # page.splash = None  # Commented: not a valid Page attribute
             page.update()
 
     # Initial load
@@ -283,7 +281,7 @@ def dashboard_view(page: ft.Page):
                         cards_column,
                     ],
                     expand=True,
-                    scroll="auto",
+                    # scroll="auto",  # Removed: not a valid argument
                 ),
             ],
             expand=True,
