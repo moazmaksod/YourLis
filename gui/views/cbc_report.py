@@ -331,7 +331,7 @@ async def cbc_report_view(page: ft.Page, patient_id):
             <html lang=\"en\">
             <head>
                 <meta charset=\"UTF-8\">
-                <title>Hematology Report</title>
+                <title>{patient_name_disp}</title>
                 <style>
                     @page {{ size: A4; margin: 20mm; }}
                     html, body {{
