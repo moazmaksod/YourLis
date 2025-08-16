@@ -50,8 +50,9 @@ async def cbc_report_view(page: ft.Page, patient_id):
 
     # Ensure result_data is not empty before proceeding
     if not result_data:
-        page.snack_bar = ft.SnackBar(ft.Text("No result found for this patient ID."))
-        page.snack_bar.open = True
+        snack = ft.SnackBar(ft.Text("No result found for this patient ID."))
+        page.overlay.append(snack)
+        snack.open = True
         page.update()
         return
 
@@ -78,7 +79,7 @@ async def cbc_report_view(page: ft.Page, patient_id):
             # Remove time from date if present
             if isinstance(request_date_raw, str) and len(request_date_raw) > 10:
                 request_date = request_date_raw[:10]
-            elif hasattr(request_date_raw, "strftime"):
+            elif isinstance(request_date_raw, (datetime.date, datetime.datetime)):
                 request_date = request_date_raw.strftime("%d-%m-%Y")
             else:
                 request_date = str(request_date_raw)
@@ -160,7 +161,15 @@ async def cbc_report_view(page: ft.Page, patient_id):
                     if normal_range and isinstance(normal_range, tuple)
                     else "N/A"
                 )
-                flag, flag_color = set_flag(test_value, normal_range)
+                # Only call set_flag if normal_range is a tuple and not None
+                if normal_range is not None and isinstance(normal_range, tuple):
+                    flag_result = set_flag(test_value, normal_range)
+                    if flag_result is None or flag_result == "Unknown":
+                        flag, flag_color = "", "#222"
+                    else:
+                        flag, flag_color = flag_result
+                else:
+                    flag, flag_color = "", "#222"
                 # Map Flet color to hex
                 if flag_color == ft.Colors.YELLOW_700:
                     flag_color_hex = color_map["YELLOW_700"]
@@ -171,15 +180,16 @@ async def cbc_report_view(page: ft.Page, patient_id):
                 else:
                     flag_color_hex = "#222"
 
-                # Use inline SVG if available, otherwise fallback to emoji
-                icon_html = svg_content_map.get(s["icon"])
+                # Ensure s['icon'] is a string for svg_content_map.get
+                icon_key = str(s.get("icon", ""))
+                icon_html = svg_content_map.get(icon_key)
                 if icon_html:
                     icon_html = icon_html.replace(
                         "<svg",
                         '<svg width="18" height="18" style="vertical-align:middle;margin-right:4px;"',
                     )
                 else:
-                    icon_html = s["icon"]
+                    icon_html = icon_key
 
                 # Inline visualization: mini bar for value vs normal range
                 def render_inline_bar(value, normal_range):
@@ -493,16 +503,18 @@ async def cbc_report_view(page: ft.Page, patient_id):
                 f.write(html_content)
             log_info(f"HTML report written to: {html_path}")
 
-            page.snack_bar = ft.SnackBar(ft.Text(f"HTML saved: {html_path}"))
-            page.snack_bar.open = True
+            snack = ft.SnackBar(ft.Text(f"HTML saved: {html_path}"))
+            page.overlay.append(snack)
+            snack.open = True
             page.update()
         except Exception as ex:
             log_error(f"Failed to save HTML: {ex}")
             import traceback
 
             log_error(traceback.format_exc())
-            page.snack_bar = ft.SnackBar(ft.Text(f"Failed to save HTML: {ex}"))
-            page.snack_bar.open = True
+            snack = ft.SnackBar(ft.Text(f"Failed to save HTML: {ex}"))
+            page.overlay.append(snack)
+            snack.open = True
             page.update()
 
     # Define report_view outside the if block to ensure it's always defined
@@ -511,7 +523,9 @@ async def cbc_report_view(page: ft.Page, patient_id):
         modal=True,
         scrollable=True,
         title=ft.Text("Hematology Report"),
-        content=ft.Column([ReportPatientInfo(result_data), ReportPatientResult(result_data)]),  # type: ignore
+        content=ft.Column(
+            [ReportPatientInfo(result_data), ReportPatientResult(result_data)]
+        ),
         actions=[
             ft.ElevatedButton("Save as HTML", on_click=save_report_as_html),
             ft.ElevatedButton("Close", on_click=close_report_view),
