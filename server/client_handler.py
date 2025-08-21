@@ -37,13 +37,13 @@ def add_communication_message(client_address, message, direction):
             client_name = f"{ip}"
         else:
             client_name = str(client_address)
-            
+
     msg = {
         "timestamp": datetime.now().isoformat(),
         "client_name": client_name,
         "client_address": str(client_address),  # Store address as string"
         "message": message.decode() if isinstance(message, bytes) else str(message),
-        "direction": direction
+        "direction": direction,
     }
     communication_messages.append(msg)
 
@@ -110,7 +110,7 @@ async def handle_client_connection(reader, writer):
                     f"({len(message)})of Data received from ({client_address})",
                     source=SOURCE,
                 )
-                
+
                 # Log incoming message
                 add_communication_message(client_address, message, "device")
 
@@ -118,16 +118,18 @@ async def handle_client_connection(reader, writer):
                 handel_response = handle_incoming_data(message)
 
                 # Send the response back to the client if available
-                if handel_response != None:
+                if handel_response is not None:
                     response = handel_response[0]  # Extract the response from the tuple
                     clients_with_names.update(
                         {client_address: handel_response[1]}
                     )  # Update the client name if available
-                    
+
                     # Log outgoing message
                     add_communication_message(client_address, response, "server")
-                    
-                    await send_outgoing_data(writer, response)
+
+                    result = send_outgoing_data(writer, response)
+                    if hasattr(result, "__await__"):
+                        await result
                 else:
                     log_info(
                         f"No response generated for {client_address}: {message}",

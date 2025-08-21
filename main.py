@@ -4,7 +4,6 @@ import time
 import httpx
 from setting.config import get_config, save_config, pre_startup_check
 from gui.main_flet import main as flet_main
-from gui.api_methods import start_server as cbc_start_server
 from log.logger import log_info, log_error
 import flet as ft
 

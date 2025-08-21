@@ -7,7 +7,7 @@ import base64
 import secrets
 import pyodbc
 from log.logger import log_info, log_error, log_warning
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List
 
 
 SOURCE = "Config"
@@ -317,6 +317,9 @@ def pre_startup_check():
     # Check SQL Server driver
     drivers = get_available_sql_drivers()
     if not drivers:
-        log_warning("No SQL Server driver found. Application may not work properly.", source=SOURCE)
+        log_warning(
+            "No SQL Server driver found. Application may not work properly.",
+            source=SOURCE,
+        )
     else:
         log_info(f"SQL Server drivers available: {drivers}", source=SOURCE)
