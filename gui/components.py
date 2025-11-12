@@ -121,7 +121,7 @@ def side_menu(on_item_click):
                 ft.NavigationRailDestination(
                     icon=ft.Icon(ft.Icons.GROUPS_SHARP), label="patient"
                 ),
-                                ft.NavigationRailDestination(
+                ft.NavigationRailDestination(
                     icon=ft.Icon(ft.Icons.SETTINGS), label="Settings"
                 ),
                 ft.NavigationRailDestination(
@@ -260,3 +260,31 @@ def close_confirm_dialog(page: ft.Page):
     )
 
     return confirm_dialog
+
+
+def db_conn_fail_dialog(page: ft.Page, on_settings):
+    """
+    Return a dialog for DB connection failure with Go to Settings and Cancel.
+    """
+
+    def go_to_settings(e):
+        dialog.open = False
+        page.update()
+        on_settings()
+
+    def cancel(e):
+        dialog.open = False
+        page.update()
+
+    dialog = ft.AlertDialog(
+        title=ft.Text("Database Connection Error"),
+        content=ft.Text(
+            "Database connection failed! Please check settings and correct DB info."
+        ),
+        actions=[
+            ft.ElevatedButton("Go to Settings", on_click=go_to_settings),
+            ft.OutlinedButton("Cancel", on_click=cancel),
+        ],
+        actions_alignment=ft.MainAxisAlignment.END,
+    )
+    return dialog

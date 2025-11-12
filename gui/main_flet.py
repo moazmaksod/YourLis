@@ -6,6 +6,7 @@ from gui.components import (
     close_confirm_dialog,
     title_bar,
     footer,
+    db_conn_fail_dialog,  # import the new dialog
 )
 from gui.views.dashboard import dashboard_view
 from gui.views.stream import stream_view
@@ -48,6 +49,34 @@ def main(page: ft.Page):
     # handel close window
     confirm_dialog = close_confirm_dialog(page)
 
+    # Show DB connection fail dialog as overlay if DB is not connected at startup
+    from database.sqlconnection import get_db_connection
+
+    def show_settings_view():
+        # Use the same logic as side menu navigation to settings
+        selected = 3  # index for settings
+        views_map = {
+            0: "dashboard",
+            1: "Stream",
+            2: "patient",
+            3: "settings",
+            4: "about",
+        }
+        view_key = views_map.get(selected)
+        if view_key not in cached_views:
+            cached_views[view_key] = settings_view(page)
+        current_view.controls.clear()
+        current_view.controls.append(cached_views[view_key])
+        page.update()
+
+    try:
+        get_db_connection()
+    except Exception:
+        dialog = db_conn_fail_dialog(page, on_settings=show_settings_view)
+        page.overlay.append(dialog)
+        dialog.open = True
+        page.update()
+
     # Handle window close events
     def handle_window_event(e):
         if e.data == "close":
@@ -60,7 +89,7 @@ def main(page: ft.Page):
     page.window.on_event = handle_window_event
 
     # --- ROLLBACK: USE STATIC LOGIN ---
-    login_dialog(page)
+    # login_dialog(page)
     # Below is the old app rendering logic (no login gating needed)
 
     # Navigation state

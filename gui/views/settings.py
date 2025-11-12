@@ -91,23 +91,23 @@ def settings_view(page: ft.Page):
     server_host = ft.TextField(label="Server Host", value=cfg["SERVER_HOST"])
     server_port = ft.TextField(label="Server Port", value=cfg["SERVER_PORT"])
     database_type = ft.Dropdown(
-    label="Database Type",
-    value=cfg["DB_TYPE"],
-    options=[
-    ft.dropdown.Option("local"),
-    ft.dropdown.Option("online"),
-    ],
-    width=200,
-    hint_text="Select database type",
+        label="Database Type",
+        value=cfg["DB_TYPE"],
+        options=[
+            ft.dropdown.Option("local"),
+            ft.dropdown.Option("online"),
+        ],
+        width=200,
+        hint_text="Select database type",
     )
-    
+
     # Create dropdown for database drivers
     database_driver = ft.Dropdown(
-    label="Database Driver",
-    value=cfg["DB_DRIVE"],
-    options=[ft.dropdown.Option(driver) for driver in available_drivers],
-    width=300,
-    hint_text="Select SQL Server driver",
+        label="Database Driver",
+        value=cfg["DB_DRIVE"],
+        options=[ft.dropdown.Option(driver) for driver in available_drivers],
+        width=300,
+        hint_text="Select SQL Server driver",
     )
 
     database_host = ft.TextField(label="Database Host", value=cfg["DB_HOST"])
