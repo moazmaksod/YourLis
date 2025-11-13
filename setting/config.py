@@ -156,6 +156,12 @@ def _load_config(
 ) -> Dict[str, Any]:
     """Load and decrypt configuration from file."""
     try:
+        # Ensure the setting directory exists
+        setting_dir = os.path.dirname(config_url)
+        if setting_dir and not os.path.exists(setting_dir):
+            os.makedirs(setting_dir)
+            log_info(f"Created directory: {setting_dir}", source=SOURCE)
+
         # Load or generate encryption key
         if os.path.exists(key_url):
             with open(key_url, "rb") as file:
@@ -307,6 +313,12 @@ def pre_startup_check():
     """
     Ensure config.json exists with defaults if missing, and check SQL Server driver availability.
     """
+    # Ensure the setting directory exists
+    setting_dir = os.path.dirname(CONFIG_URL)
+    if setting_dir and not os.path.exists(setting_dir):
+        os.makedirs(setting_dir)
+        log_info(f"Created directory: {setting_dir}", source=SOURCE)
+
     # Check config.json existence
     if not os.path.exists(CONFIG_URL):
         log_info("Config file not found. Creating with default values.", source=SOURCE)

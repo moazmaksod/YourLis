@@ -15,6 +15,24 @@ from gui.views.settings import settings_view
 from gui.views.about import about_view
 from gui.theme import get_app_themes, app_fonts  # Import themes and fonts
 
+import os
+import sys
+
+# Get the absolute path of the current script's directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# Go up one level to the project root
+project_root = os.path.dirname(script_dir)
+# Add the project root to the Python path to ensure correct module resolution
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# Construct the absolute path to the 'setting' directory
+setting_dir = os.path.join(project_root, "setting")
+
+# Ensure the setting directory exists before importing from it
+if not os.path.exists(setting_dir):
+    os.makedirs(setting_dir)
+
 from setting.config import get_config
 
 
