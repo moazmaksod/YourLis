@@ -1,4 +1,5 @@
 import pyodbc
+import os
 from log.logger import log_info, log_error, log_warning
 from setting import config
 
@@ -26,6 +27,7 @@ def get_db_connection():
         DB_HOST = cfg["DB_HOST"]
         DB_PORT = cfg["DB_PORT"]
         DB_NAME = cfg["DB_NAME"]
+        log_info(f"Using database name: {DB_NAME}", source=SOURCE)
         DB_USER = cfg["DB_USER"]
         DB_PASSWORD = cfg["DB_PASSWORD"]
         DB_TYPE = cfg["DB_TYPE"]
@@ -68,6 +70,7 @@ def get_db_connection():
         # Attempt to establish the connection with a short timeout (3 seconds)
         connection = pyodbc.connect(connection_string, timeout=3)
         log_info("Successfully connected to the database.", source=SOURCE)
+        
         return connection
 
     except ValueError as ve:

@@ -52,7 +52,7 @@ DB_TYPE = "local"
 DB_DRIVE = "ODBC Driver 17 for SQL Server"
 DB_HOST = "localhost"
 DB_PORT = 1433
-DB_NAME = "patients"
+DB_NAME = "YourLIS_DB"
 
 # server setting
 SERVER_HOST = "192.168.1.103"

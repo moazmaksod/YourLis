@@ -244,3 +244,29 @@ async def exec_procedure_for(db_schema: dict, values: dict):
     data = (sql, value)
 
     return querie_exe(data)
+
+
+async def exec_procedure_no_return(db_schema: dict, values: dict):
+    """
+    Executes a stored procedure that does not return a result set (e.g., an UPDATE or INSERT).
+
+    Args:
+        db_schema (dict): A dictionary containing the procedure name and parameters.
+        values (dict): A dictionary of parameter values.
+    """
+    procedure_name = db_schema["PROCEDURE_NAME"]
+    parameters = db_schema["PARAMETERS"]
+
+    parameters_string = ", ".join([f"@{param} = ?" for param in parameters])
+    sql = f"EXEC {procedure_name} {parameters_string}"
+
+    value_list = [values.get(param) for param in parameters]
+    value_tuple = tuple(None if v == "" else v for v in value_list)
+
+    data = (sql, value_tuple)
+
+    # Use querie_exe but we don't need the return value
+    # Assuming querie_exe can handle operations that don't return rows
+    querie_exe(data, expect_results=False)
+
+    return None

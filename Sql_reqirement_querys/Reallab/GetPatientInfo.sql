@@ -1,5 +1,4 @@
-USE [patients]
-GO
+
 
 /****** Object:  StoredProcedure [dbo].[GetPatientInfo]    Script Date: 8/15/2025 10:41:27 PM ******/
 SET ANSI_NULLS ON
@@ -8,7 +7,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE [dbo].[GetPatientInfo]
+CREATE OR ALTER PROCEDURE [dbo].[GetPatientInfo]
     @PATIENT_ID VARCHAR(13) = NULL,
     @PATIENT_NAME NVARCHAR(100) = NULL,
     @START_DATE SMALLDATETIME = NULL, -- Parameter for start date

@@ -1,5 +1,4 @@
-USE [patients]
-GO
+
 
 /****** Object:  StoredProcedure [dbo].[GetPatientCBCResult]    Script Date: 8/15/2025 10:41:22 PM ******/
 SET ANSI_NULLS ON
@@ -8,7 +7,11 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE PROCEDURE [dbo].[GetPatientCBCResult]
+
+DROP PROCEDURE IF EXISTS [dbo].[GetPatientCBCResult];
+GO
+
+CREATE OR ALTER PROCEDURE [dbo].[GetPatientCBCResult]
     @PATIENT_ID VARCHAR(13)  -- Patient ID is required
 AS
 BEGIN

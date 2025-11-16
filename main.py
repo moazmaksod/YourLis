@@ -6,6 +6,7 @@ from setting.config import get_config, save_config, pre_startup_check
 from gui.main_flet import main as flet_main
 from log.logger import log_info, log_error
 import flet as ft
+from database.db_schema import setup_database_schema
 from database.sqlconnection import get_db_connection
 import os
 
@@ -74,67 +75,10 @@ def patch_api_methods_base_url(api_ip, port):
 
 def database_startup_check():
     """
-    Check DB connection and ensure required stored procedures exist, creating them if missing.
-    If connection fails, return False.
+    Check DB connection and ensure required tables and stored procedures exist, creating them if missing.
     """
-
-    # List of required procedures and their .sql files
-    required_procs = [
-        (
-            "GetPatientInfo",
-            os.path.join("Sql_reqirement_querys", "Reallab", "GetPatientInfo.sql"),
-        ),
-        (
-            "GetPatientCBCResult",
-            os.path.join("Sql_reqirement_querys", "Reallab", "GetPatientCBCResult.sql"),
-        ),
-    ]
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        log_info("Database connection established for startup check.")
-        for proc_name, sql_path in required_procs:
-            # Check if procedure exists
-            cursor.execute(
-                """
-                SELECT COUNT(*) FROM sys.objects WHERE type = 'P' AND name = ?
-            """,
-                (proc_name,),
-            )
-            row = cursor.fetchone()
-            exists = row[0] if row else 0
-            if not exists:
-                log_info(
-                    f"Stored procedure '{proc_name}' not found. Creating from {sql_path}."
-                )
-                with open(sql_path, encoding="utf-8") as f:
-                    sql = f.read()
-                # Remove USE/GO lines for pyodbc execution
-                sql_lines = [
-                    line
-                    for line in sql.splitlines()
-                    if not line.strip().upper().startswith(("USE ", "GO"))
-                ]
-                # Find the first line with CREATE or ALTER PROCEDURE
-                for idx, line in enumerate(sql_lines):
-                    if (
-                        line.strip()
-                        .upper()
-                        .startswith(("CREATE PROCEDURE", "ALTER PROCEDURE"))
-                    ):
-                        sql_lines = sql_lines[idx:]
-                        break
-                sql = "\n".join(sql_lines)
-                try:
-                    cursor.execute(sql)
-                    conn.commit()
-                    log_info(f"Stored procedure '{proc_name}' created.")
-                except Exception as e:
-                    log_error(f"Error creating procedure {proc_name}: {e}\nSQL: {sql}")
-            else:
-                log_info(f"Stored procedure '{proc_name}' exists.")
-        cursor.close()
-        conn.close()
+        setup_database_schema()
         return True
     except Exception as e:
         log_error(f"Database startup check failed: {e}")
@@ -142,35 +86,40 @@ def database_startup_check():
 
 
 def show_db_error_window():
-    import flet as ft
-    from gui.main_flet import main as flet_main
-
-    def notify(page: ft.Page):
-        # Show notification
-        snack = ft.SnackBar(
-            ft.Text(
-                "Database connection failed! Please check settings and correct DB info."
-            ),
-            open=True,
+    """
+    Shows a Flet window with a database error message.
+    """
+    def error_app(page: ft.Page):
+        page.title = "Database Error"
+        page.vertical_alignment = ft.MainAxisAlignment.CENTER
+        page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+        page.add(
+            ft.Column(
+                [
+                    ft.Text("Database Error", size=30, weight=ft.FontWeight.BOLD),
+                    ft.Text(
+                        "A critical error occurred with the database setup or connection.",
+                        size=16,
+                    ),
+                    ft.Text(
+                        "Please check the application logs for details and ensure the database is correctly configured.",
+                        size=16,
+                    ),
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=10,
+            )
         )
-        page.overlay.append(snack)
         page.update()
-        # Try to navigate to settings page if possible
-        try:
-            if hasattr(page, "go"):
-                page.go("/settings")
-        except Exception:
-            pass
 
-    # Open the main app, and let the app itself handle redirecting to settings if DB is not connected
-    ft.app(target=flet_main, assets_dir="assets")
+    ft.app(target=error_app)
 
 
 def main():
     # Ensure required folders exist
     import os
 
-    for folder in ["assets", "setting"]:
+    for folder in ["assets", "setting", "logs"]:
         if not os.path.exists(folder):
             os.makedirs(folder)
 
@@ -178,7 +127,13 @@ def main():
     cfg = get_config()
     api_ip = cfg["API_IP"]
     pre_startup_check()
-    database_startup_check()  # Always run, but do not block app startup
+
+    # Perform database startup check. If it fails, show an error and exit.
+    if not database_startup_check():
+        log_error("Database check failed. Showing error window and shutting down.")
+        show_db_error_window()
+        return  # Exit the application
+
     # Dynamically assign a port for FastAPI
     port = generate_dynamic_port(api_ip)
     # Save the dynamic port to config for reference BEFORE any API calls

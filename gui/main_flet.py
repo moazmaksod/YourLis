@@ -6,11 +6,11 @@ from gui.components import (
     close_confirm_dialog,
     title_bar,
     footer,
-    db_conn_fail_dialog,  # import the new dialog
 )
 from gui.views.dashboard import dashboard_view
 from gui.views.stream import stream_view
 from gui.views.patient import patient_view
+from gui.views.send_out import send_out_view
 from gui.views.settings import settings_view
 from gui.views.about import about_view
 from gui.theme import get_app_themes, app_fonts  # Import themes and fonts
@@ -72,13 +72,14 @@ def main(page: ft.Page):
 
     def show_settings_view():
         # Use the same logic as side menu navigation to settings
-        selected = 3  # index for settings
+        selected = 4  # index for settings
         views_map = {
             0: "dashboard",
             1: "Stream",
-            2: "patient",
-            3: "settings",
-            4: "about",
+            2: "send_out",
+            3: "patient",
+            4: "settings",
+            5: "about",
         }
         view_key = views_map.get(selected)
         if view_key not in cached_views:
@@ -123,9 +124,10 @@ def main(page: ft.Page):
         views_map = {
             0: "dashboard",
             1: "Stream",
-            2: "patient",
-            3: "settings",
-            4: "about",
+            2: "send_out",
+            3: "patient",
+            4: "settings",
+            5: "about",
         }
 
         view_key = views_map.get(selected)
@@ -138,6 +140,8 @@ def main(page: ft.Page):
                 cached_views[view_key] = dashboard_view(page)
             elif view_key == "Stream":
                 cached_views[view_key] = stream_view(page)  # Pass the page parameter
+            elif view_key == "send_out":
+                cached_views[view_key] = send_out_view(page)
             elif view_key == "patient":
                 cached_views[view_key] = patient_view(page)
             elif view_key == "settings":

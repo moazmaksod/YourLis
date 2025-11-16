@@ -5,13 +5,14 @@ from database.sqlconnection import get_db_connection
 SOURCE = "Database"
 
 
-def querie_exe(data):
+def querie_exe(data, expect_results=True):
     """
     Executes the provided SQL query with the given values. Handles SELECT, INSERT, UPDATE, and DELETE queries.
 
     Args:
         data (tuple): A tuple containing the SQL query and the values to be inserted, updated, fetched, or deleted.
                       Example: (query, values)
+        expect_results (bool): Whether to expect a result set from the query. Defaults to True.
 
     Returns:
         result (dict or None):
@@ -48,25 +49,29 @@ def querie_exe(data):
             log_info("No results returned for SELECT query.", source=SOURCE)
             return None  # Return None if no results found
 
-        # For EXEC queries, fetch the results and return them
+        # For EXEC queries, handle based on whether results are expected
         elif sql.strip().upper().startswith("EXEC"):
+            if expect_results:
+                results = cursor.fetchall()
+                log_info(f"Executed EXEC query: {sql} with values: {values}", source=SOURCE)
 
-            cursor.execute(sql, values)
-            results = cursor.fetchall()
-            log_info(f"Executed EXEC query: {sql} with values: {values}", source=SOURCE)
+                if results:
+                    # Fetch the results as a list of dictionaries
+                    columns = [column[0] for column in cursor.description]
+                    result_dicts = []
 
-            if results:
-                # Fetch the results as a list of dictionaries
-                columns = [column[0] for column in cursor.description]
-                result_dicts = []
+                    for row in results:
+                        result_dict = {columns[i]: row[i] for i in range(len(columns))}
+                        result_dicts.append(result_dict)
+                    return result_dicts
 
-                for row in results:
-                    result_dict = {columns[i]: row[i] for i in range(len(columns))}
-                    result_dicts.append(result_dict)
-                return result_dicts
-
-            log_info("No results returned for EXEC query.", source=SOURCE)
-            return None  # Return None if no results found
+                log_info("No results returned for EXEC query.", source=SOURCE)
+                return None  # Return None if no results found
+            else:
+                # For EXEC that doesn't return results, just commit
+                connection.commit()
+                log_info(f"Executed non-result EXEC query: {sql} with values: {values}", source=SOURCE)
+                return None
 
         else:
             # For INSERT, UPDATE, DELETE, commit the transaction
