@@ -58,9 +58,6 @@ DB_NAME = "YourLIS_DB"
 SERVER_HOST = "192.168.1.103"
 SERVER_PORT = 4000
 
-APP_USER = "admin"
-APP_PASSWORD = "123"
-
 
 # connected deviced from hl7 message
 
@@ -76,8 +73,6 @@ SUPPORTED_DEVICES = {
 encrypt_list = [
     "DB_USER",
     "DB_PASSWORD",
-    "APP_USER",
-    "APP_PASSWORD",
 ]  # List of keys to encrypt
 
 
@@ -104,8 +99,6 @@ default_config_data = {
     "DB_NAME": DB_NAME,
     "DB_USER": DB_USER,
     "DB_PASSWORD": DB_PASSWORD,
-    "APP_USER": APP_USER,
-    "APP_PASSWORD": APP_PASSWORD,
     "SUPPORTED_DEVICES": SUPPORTED_DEVICES,
 }
 
