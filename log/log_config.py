@@ -1,5 +1,6 @@
 import logging
 import logging.handlers
+from concurrent_log_handler import ConcurrentRotatingFileHandler
 import os
 import datetime
 
@@ -45,7 +46,7 @@ def configure_logging():
     )
 
     # File handler with log rotation (max 1 MB per file, keep 5 backup files)
-    file_handler = logging.handlers.RotatingFileHandler(
+    file_handler = ConcurrentRotatingFileHandler(
         log_file, maxBytes=1 * 1024 * 1024, backupCount=5, encoding='utf-8'
     )
     file_handler.setLevel(logging.DEBUG)  # Capture all logs to the file

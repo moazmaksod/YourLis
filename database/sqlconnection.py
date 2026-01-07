@@ -65,8 +65,8 @@ def get_db_connection():
             )
             raise ValueError("Invalid DB_TYPE specified. Use 'local' or 'online'.")
 
-        # Attempt to establish the connection
-        connection = pyodbc.connect(connection_string)
+        # Attempt to establish the connection with a short timeout (3 seconds)
+        connection = pyodbc.connect(connection_string, timeout=3)
         log_info("Successfully connected to the database.", source=SOURCE)
         return connection
 

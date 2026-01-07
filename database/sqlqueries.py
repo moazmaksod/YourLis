@@ -1,5 +1,6 @@
 from database.sqlqueriesExe import querie_exe
 from hl7msghandel.hl7fitsql import update_hl7_dictionary
+from database.sqlconnection import get_db_connection
 
 
 SOURCE = "Database"

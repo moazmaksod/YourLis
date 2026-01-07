@@ -66,6 +66,8 @@ class PaginatedDataTable(ft.DataTable):
         self.update()
 
 
+import asyncio
+
 async def fetch_patient_data(
     patient_id=None,
     patient_name=None,
@@ -84,8 +86,8 @@ async def fetch_patient_data(
             "END_DATE": end_date or None,
             "RESULT_FINISHED": result_finished,
         }
-
-        return await exec_procedure_for(PATIENT_SEARCH_SQL, params) or []
+        # Run the blocking DB call in a thread to avoid freezing the GUI
+        return await asyncio.to_thread(exec_procedure_for, PATIENT_SEARCH_SQL, params) or []
     except Exception as e:
         log_error(f"Error fetching patient data: {e}")
         return []
@@ -169,6 +171,9 @@ async def on_search_click(
             end_date=end_date,
             result_finished=result_condition,
         )
+        # If fetch_patient_data was not awaited somewhere else, ensure it's awaited here
+        if asyncio.iscoroutine(all_patient_data):
+            all_patient_data = await all_patient_data
 
         if not all_patient_data:
             log_info("No patients found, clearing table.")
@@ -325,17 +330,32 @@ def patient_view(page: ft.Page):
     async def search_handler(e):
         global current_page
         current_page = 1
+        page.splash = ft.ProgressBar(visible=True)
+        page.update()
 
-        await on_search_click(
-            patient_table,
-            patient_id_field,
-            patient_name_field,
-            start_date_field,
-            end_date_field,
-            result_state_variable,
-        )
+        def on_done(_):
+            page.splash = None
+            page.update()
 
-        await update_pagination_display(current_page)  # Ensure the UI shows Page 1
+        async def do_search():
+            try:
+                await on_search_click(
+                    patient_table,
+                    patient_id_field,
+                    patient_name_field,
+                    start_date_field,
+                    end_date_field,
+                    result_state_variable,
+                )
+                await update_pagination_display(current_page)  # Ensure the UI shows Page 1
+            except Exception as ex:
+                log_error(f"Error in search_handler: {ex}")
+                page.snack_bar = ft.SnackBar(ft.Text("Database error: " + str(ex)), open=True)
+                page.update()
+            finally:
+                on_done(None)
+
+        page.run_task(do_search)
 
     search_button = ft.ElevatedButton(
         text="Search",

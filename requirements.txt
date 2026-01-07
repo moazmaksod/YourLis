@@ -5,3 +5,4 @@ pydantic>=2.10.0
 pyodbc>=5.0.1
 cryptography>=45.0.2
 hl7>=0.4.5
+concurrent-log-handler >= 0.9.28

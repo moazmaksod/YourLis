@@ -17,6 +17,7 @@ def settings_view(page: ft.Page):
         setting_to_save = {
             "CONFIG_URL": config_url.value,
             "DARK_MODE": dark_mode.value,
+            "AUTO_START_CBC_SERVER": auto_start_cbc_server.value,
             "SERVER_HOST": server_host.value,
             "SERVER_PORT": server_port.value,
             "DB_TYPE": database_type.value,
@@ -81,11 +82,25 @@ def settings_view(page: ft.Page):
 
     # settings controls initializing
     config_url = ft.TextField(label="Configuration URL", value=cfg["CONFIG_URL"])
-    dark_mode = ft.Switch(label="Dark mode", value=cfg["DARK_MODE"], on_change=theme_change)
+    dark_mode = ft.Switch(
+        label="Dark mode", value=cfg["DARK_MODE"], on_change=theme_change
+    )
+    auto_start_cbc_server = ft.Switch(
+        label="Auto Start CBC Server", value=cfg.get("AUTO_START_CBC_SERVER", True)
+    )
     server_host = ft.TextField(label="Server Host", value=cfg["SERVER_HOST"])
     server_port = ft.TextField(label="Server Port", value=cfg["SERVER_PORT"])
-    database_type = ft.TextField(label="Database Type", value=cfg["DB_TYPE"])
-    
+    database_type = ft.Dropdown(
+        label="Database Type",
+        value=cfg["DB_TYPE"],
+        options=[
+            ft.dropdown.Option("local"),
+            ft.dropdown.Option("online"),
+        ],
+        width=200,
+        hint_text="Select database type",
+    )
+
     # Create dropdown for database drivers
     database_driver = ft.Dropdown(
         label="Database Driver",
@@ -116,7 +131,7 @@ def settings_view(page: ft.Page):
     application_settings = ft.Container(
         ft.Column(
             [
-                ft.Text("Application Settings", size=18, weight=ft.FontWeight.BOLD),
+                ft.Text("Application Settings", style=ft.TextThemeStyle.HEADLINE_SMALL),
                 ft.Text("Configure the application's appearance and behavior."),
                 ft.Divider(opacity=0),
                 ft.Row(controls=[config_url, dark_mode]),
@@ -127,10 +142,10 @@ def settings_view(page: ft.Page):
     server_settings = ft.Container(
         ft.Column(
             [
-                ft.Text("Server Settings", size=18, weight=ft.FontWeight.BOLD),
+                ft.Text("Server Settings", style=ft.TextThemeStyle.HEADLINE_SMALL),
                 ft.Text("Configure the server's network settings."),
                 ft.Divider(opacity=0),
-                ft.Row(controls=[server_host, server_port]),
+                ft.Row(controls=[server_host, server_port, auto_start_cbc_server]),
             ]
         )
     )
@@ -138,7 +153,7 @@ def settings_view(page: ft.Page):
     database_settings = ft.Container(
         ft.Column(
             [
-                ft.Text("Database Settings", size=18, weight=ft.FontWeight.BOLD),
+                ft.Text("Database Settings", style=ft.TextThemeStyle.HEADLINE_SMALL),
                 ft.Text("Configure the database's connection settings."),
                 ft.Divider(opacity=0),
                 ft.Row(

@@ -7,7 +7,7 @@ import base64
 import secrets
 import pyodbc
 from log.logger import log_info, log_error, log_warning
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List
 
 
 SOURCE = "Config"
@@ -37,6 +37,7 @@ LOG_DIR = "logs"
 LOG_FILE_NAME = "HealthMesh.log"
 CONFIG_URL = r"setting\config.json"
 DARK_MODE = True
+AUTO_START_CBC_SERVER = True  # Auto start CBC device listening server
 
 
 # Some db value
@@ -88,6 +89,7 @@ default_config_data = {
     "LOG_FILE_NAME": LOG_FILE_NAME,
     "CONFIG_URL": CONFIG_URL,
     "DARK_MODE": DARK_MODE,
+    "AUTO_START_CBC_SERVER": AUTO_START_CBC_SERVER,
     "CBC_TEST_CODE": CBC_TEST_CODE,
     "HGB_TEST_CODE": HGB_TEST_CODE,
     "TEST_FINISH_CODE": TEST_FINISH_CODE,
@@ -154,6 +156,12 @@ def _load_config(
 ) -> Dict[str, Any]:
     """Load and decrypt configuration from file."""
     try:
+        # Ensure the setting directory exists
+        setting_dir = os.path.dirname(config_url)
+        if setting_dir and not os.path.exists(setting_dir):
+            os.makedirs(setting_dir)
+            log_info(f"Created directory: {setting_dir}", source=SOURCE)
+
         # Load or generate encryption key
         if os.path.exists(key_url):
             with open(key_url, "rb") as file:
@@ -305,6 +313,12 @@ def pre_startup_check():
     """
     Ensure config.json exists with defaults if missing, and check SQL Server driver availability.
     """
+    # Ensure the setting directory exists
+    setting_dir = os.path.dirname(CONFIG_URL)
+    if setting_dir and not os.path.exists(setting_dir):
+        os.makedirs(setting_dir)
+        log_info(f"Created directory: {setting_dir}", source=SOURCE)
+
     # Check config.json existence
     if not os.path.exists(CONFIG_URL):
         log_info("Config file not found. Creating with default values.", source=SOURCE)
@@ -315,6 +329,9 @@ def pre_startup_check():
     # Check SQL Server driver
     drivers = get_available_sql_drivers()
     if not drivers:
-        log_warning("No SQL Server driver found. Application may not work properly.", source=SOURCE)
+        log_warning(
+            "No SQL Server driver found. Application may not work properly.",
+            source=SOURCE,
+        )
     else:
         log_info(f"SQL Server drivers available: {drivers}", source=SOURCE)
