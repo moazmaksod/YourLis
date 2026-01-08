@@ -9,6 +9,7 @@ CREATE PROCEDURE dbo.GetSendOutSamples
     @PatientName NVARCHAR(100) = NULL,
     @StartDate DATE = NULL,
     @EndDate DATE = NULL,
+    @DestinationLab NVARCHAR(100) = NULL,
     @Status NVARCHAR(50) = NULL
 AS
 BEGIN
@@ -38,7 +39,8 @@ BEGIN
         AND (@PatientID IS NULL OR pt.patientid LIKE '%' + @PatientID + '%')
         AND (@PatientName IS NULL OR p.patientnamear LIKE '%' + @PatientName + '%')
         AND (@StartDate IS NULL OR CONVERT(date, pt.requestdate) >= @StartDate)
-        AND (@EndDate IS NULL OR CONVERT(date, pt.requestdate) <= @EndDate)        
+        AND (@EndDate IS NULL OR CONVERT(date, pt.requestdate) <= @EndDate)
+        AND (@DestinationLab IS NULL OR pt.otherlabname LIKE '%' + @DestinationLab + '%')
         AND (@Status IS NULL OR 
             (@Status = 'Sent' AND sol.SentDate IS NOT NULL) OR 
             (@Status = 'Pending' AND sol.SentDate IS NULL)

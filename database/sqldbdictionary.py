@@ -22,11 +22,17 @@ PATIENT_CBC_RESULT_SQL = {
 # Used in: gui/views/send_out.py
 SEND_OUT_SEARCH_SQL = {
     "PROCEDURE_NAME": "dbo.GetSendOutSamples",
-    "PARAMETERS": ["PatientID", "PatientName", "StartDate", "EndDate", "Status"],
+    "PARAMETERS": ["PatientID", "PatientName", "StartDate", "EndDate", "DestinationLab", "Status"],
 }
 
 # Used in: gui/views/send_out.py for the "Mark as Sent" button
 INSERT_SEND_OUT_LOG_SQL = {
     "PROCEDURE_NAME": "dbo.InsertSendOutLog",
     "PARAMETERS": ["PatientID", "TestName", "SentDate"],
+}
+
+# Used in: gui/views/send_out.py
+GET_DESTINATION_LABS_SQL = {
+    "PROCEDURE_NAME": "dbo.GetDestinationLabs",
+    "PARAMETERS": [],
 }

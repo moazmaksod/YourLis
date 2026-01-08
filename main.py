@@ -7,8 +7,6 @@ from gui.main_flet import main as flet_main
 from log.logger import log_info, log_error
 import flet as ft
 from database.db_schema import setup_database_schema
-from database.sqlconnection import get_db_connection
-import os
 
 
 def generate_dynamic_port(api_ip):

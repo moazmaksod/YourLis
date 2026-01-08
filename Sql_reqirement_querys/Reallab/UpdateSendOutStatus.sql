@@ -12,15 +12,21 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Update the 'send' status to 'Sent' and set the 'taslimdate'
-    -- This identifies the specific test for the patient to update.
-    UPDATE dbo.patienttest
-    SET
-        send = 1,
-        taslimdate = @SentDate
-    WHERE
-        patientid = @PatientID
-        AND testsimp = @TestName
-        AND sentout = 1;
+    -- Check if the test is a valid send-out test
+    IF EXISTS (SELECT 1 FROM dbo.patienttest WHERE patientid = @PatientID AND testsimp = @TestName AND sentout = 1)
+    BEGIN
+        -- Use SendOutLog table to track sent status and date instead of updating patienttest
+        IF EXISTS (SELECT 1 FROM dbo.SendOutLog WHERE PatientID = @PatientID AND TestName = @TestName)
+        BEGIN
+            UPDATE dbo.SendOutLog
+            SET SentDate = @SentDate
+            WHERE PatientID = @PatientID AND TestName = @TestName;
+        END
+        ELSE
+        BEGIN
+            INSERT INTO dbo.SendOutLog (PatientID, TestName, SentDate)
+            VALUES (@PatientID, @TestName, @SentDate);
+        END
+    END
 END
 GO

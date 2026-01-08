@@ -7,6 +7,7 @@ from database.sqlqueries import exec_procedure_for, exec_procedure_no_return
 from database.sqldbdictionary import (
     SEND_OUT_SEARCH_SQL,
     INSERT_SEND_OUT_LOG_SQL,
+    GET_DESTINATION_LABS_SQL,
 )
 
 # Date format settings from patient view
@@ -15,9 +16,8 @@ sql_time_format = "%Y-%m-%d"
 
 RESULTS_PER_PAGE = 20
 
-
 async def fetch_send_out_data(
-    patient_id=None, patient_name=None, start_date=None, end_date=None, status=None
+    patient_id=None, patient_name=None, destination_lab=None, start_date=None, end_date=None, status=None
 ):
     """
     Placeholder function to fetch send-out sample data.
@@ -27,19 +27,29 @@ async def fetch_send_out_data(
         params = {
             "PatientID": patient_id or None,
             "PatientName": patient_name or None,
+            "DestinationLab": destination_lab or None,
             "StartDate": start_date or None,
             "EndDate": end_date or None,
             "Status": status or None,
         }
-        # Directly await the coroutine
-        return (
-            await exec_procedure_for(SEND_OUT_SEARCH_SQL, params)
-            or []
-        )
+        # Run blocking DB call in thread
+        return await exec_procedure_for(SEND_OUT_SEARCH_SQL, params) or []
     except Exception as e:
         log_error(f"Error fetching send-out data: {e}")
         return []
 
+
+async def fetch_destination_labs():
+    """
+    Fetches the list of destination labs.
+    """
+    try:
+        result = await exec_procedure_for(GET_DESTINATION_LABS_SQL, {})
+        log_info(f"Fetched {len(result) if result else 0} destination labs.")
+        return result or []
+    except Exception as e:
+        log_error(f"Error fetching destination labs: {e}")
+        return []
 
 class PaginatedSendOutTable(ft.DataTable):
     """
@@ -137,7 +147,7 @@ def create_send_out_row(page, sample):
                 "SentDate": datetime.datetime.now(),
             }
 
-            # Directly await the coroutine
+            # Run blocking DB call in thread
             await exec_procedure_no_return(INSERT_SEND_OUT_LOG_SQL, params)
 
             # Update the UI to reflect the change
@@ -184,6 +194,12 @@ def send_out_view(page: ft.Page):
     # --- Search Filters ---
     patient_id_field = ft.TextField(label="Patient ID", width=150)
     patient_name_field = ft.TextField(label="Patient Name", width=200)
+    destination_lab_dropdown = ft.Dropdown(
+        label="Destination Lab",
+        width=200,
+        options=[ft.dropdown.Option(text="All", key="")],
+        on_change=lambda e: page.run_task(search_handler, e),
+    )
 
     # Date pickers setup, similar to patient_view
     def on_date_change(e, date_field):
@@ -226,6 +242,7 @@ def send_out_view(page: ft.Page):
         ],
         value="Pending",
         width=180,
+        on_change=lambda e: page.run_task(search_handler, e),
     )
 
     send_out_table = PaginatedSendOutTable(page, RESULTS_PER_PAGE)
@@ -256,6 +273,7 @@ def send_out_view(page: ft.Page):
             data = await fetch_send_out_data(
                 patient_id=patient_id_field.value,
                 patient_name=patient_name_field.value,
+                destination_lab=destination_lab_dropdown.value,
                 start_date=start_date,
                 end_date=end_date,
                 status=status_val,
@@ -340,6 +358,26 @@ def send_out_view(page: ft.Page):
     # Initial data load
     page.run_task(search_handler, None)
 
+    # --- Load Destination Labs ---
+    async def load_labs_task():
+        # Give the UI a moment to mount
+        await asyncio.sleep(0.5)
+        labs = await fetch_destination_labs()
+        options = [ft.dropdown.Option(text="All", key="")]
+        if labs:
+            options.extend(
+                ft.dropdown.Option(text=lab.get("gehahname", "Unknown"), key=lab.get("gehahname", ""))
+                for lab in labs
+            )
+        destination_lab_dropdown.options = options
+        if destination_lab_dropdown.page:
+            try:
+                destination_lab_dropdown.update()
+            except Exception as e:
+                log_error(f"Error updating destination lab dropdown: {e}")
+
+    page.run_task(load_labs_task)
+
     # --- Layout ---
     return ft.Container(
         content=ft.Column(
@@ -348,6 +386,7 @@ def send_out_view(page: ft.Page):
                     controls=[
                         patient_id_field,
                         patient_name_field,
+                        destination_lab_dropdown,
                         start_date_picker_button,
                         start_date_field,
                         end_date_picker_button,
