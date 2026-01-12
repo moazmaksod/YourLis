@@ -460,8 +460,10 @@ def send_out_view(page: ft.Page):
             await send_out_table.load_page(1)
             await update_pagination_display(1)
 
+        except Exception as ex:
             log_error(f"Error in send_out search_handler: {ex}")
             page.snack_bar = ft.SnackBar(ft.Text(f"Error: {ex}"), open=True)
+
         finally:
             page.splash = None
             page.update()

@@ -75,7 +75,6 @@ async def handle_client_connection(reader, writer):
     clients[client_address] = writer
 
     buffer = bytearray()  # Use bytearray for efficient appending
-    messages = []  # List to store extracted messages
 
     try:
         while True:
@@ -96,18 +95,13 @@ async def handle_client_connection(reader, writer):
                     break  # No more complete messages
 
                 # Extract the message
-                message = buffer[
-                    start_index : end_index + 1
-                ]  # +1 to skip the start marker
-
-                messages.append(bytes(message))  # Store the message as bytes
+                message = bytes(buffer[start_index : end_index + 1])
 
                 # Remove the processed part from the buffer
-                del buffer[: end_index + 1]  # +1 to skip the end marker
+                del buffer[: end_index + 1]
 
-            for message in messages:
                 log_info(
-                    f"({len(message)})of Data received from ({client_address})",
+                    f"({len(message)}) of Data received from ({client_address})",
                     source=SOURCE,
                 )
 
@@ -136,7 +130,6 @@ async def handle_client_connection(reader, writer):
                         source=SOURCE,
                     )
 
-                messages.pop(messages.index(message))
 
     except Exception as e:
         log_error(f"Error with client {client_address}: {e}", source=SOURCE)

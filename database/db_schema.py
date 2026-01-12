@@ -4,57 +4,21 @@ import pyodbc
 from database.sqlconnection import get_db_connection, SOURCE
 from log.logger import log_info, log_error
 
-def get_sql_file_priority(file_path):
+def get_sql_priority_from_content(content):
     """
-    Determines the execution priority of a SQL file based on its content.
-    Priority 0: Table creations.
-    Priority 1: Alters, procedures, functions, views.
-    Priority 2: Data modifications, other scripts.
+    Determines execution priority based on uppercase content.
     """
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read().upper()
-        
-        if 'CREATE TABLE' in content:
-            return 0
-        if 'ALTER TABLE' in content or 'CREATE PROCEDURE' in content or \
-           'CREATE OR ALTER PROCEDURE' in content or 'CREATE FUNCTION' in content or \
-           'CREATE VIEW' in content:
-            return 1
-        return 2
-    except Exception as e:
-        log_error(f"Error reading {os.path.basename(file_path)} for priority: {e}", source=SOURCE)
-        return 100 # High number to push it to the end
-
-def execute_sql_file(cursor, file_path):
-    """
-    Executes the SQL commands from a given file.
-    Splits the script by 'GO' to handle batch operations.
-    """
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            sql_script = f.read()
-        
-        # Split the script into individual commands, separated by 'GO'
-        sql_commands = sql_script.split('GO')
-        
-        for command in sql_commands:
-            if command.strip():
-                cursor.execute(command)
-        
-        log_info(f"Successfully executed {os.path.basename(file_path)}", source=SOURCE)
-        return True
-    except Exception as e:
-        log_error(f"Error executing {os.path.basename(file_path)}: {e}", source=SOURCE)
-        # Re-raise the exception to be caught by the caller
-        raise
+    content_upper = content.upper()
+    if 'CREATE TABLE' in content_upper:
+        return 0
+    if any(k in content_upper for k in ['ALTER TABLE', 'CREATE PROCEDURE', 'CREATE OR ALTER PROCEDURE', 'CREATE FUNCTION', 'CREATE VIEW']):
+        return 1
+    return 2
 
 def setup_database_schema():
     """
-    Sets up and verifies the database schema by executing all SQL scripts
-    found in the 'Sql_reqirement_querys' subdirectories.
-    It intelligently sorts the scripts to ensure tables are created before
-    procedures and other objects.
+    Sets up and verifies the database schema by executing all SQL scripts.
+    Optimized to read files once and sort based on pre-calculated priority.
     """
     log_info("Starting database schema setup and verification...", source=SOURCE)
     connection = None
@@ -68,28 +32,50 @@ def setup_database_schema():
             log_info(f"SQL requirements directory not found at: {base_sql_dir}. Skipping schema setup.", source=SOURCE)
             return
 
-        sql_files = []
+        sql_data = []
         for root, _, files in os.walk(base_sql_dir):
             for file in files:
                 if file.endswith('.sql'):
-                    sql_files.append(os.path.join(root, file))
+                    file_path = os.path.join(root, file)
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                        priority = get_sql_priority_from_content(content)
+                        sql_data.append({
+                            'path': file_path,
+                            'name': file,
+                            'content': content,
+                            'priority': priority
+                        })
+                    except Exception as e:
+                        log_error(f"Error reading {file}: {e}", source=SOURCE)
 
-        if not sql_files:
+        if not sql_data:
             log_info("No SQL files found for schema setup.", source=SOURCE)
             return
 
-        # Sort files based on content to ensure correct execution order
-        sorted_files = sorted(sql_files, key=get_sql_file_priority)
+        # Sort files based on pre-calculated priority
+        sql_data.sort(key=lambda x: x['priority'])
 
         log_info("Execution order of SQL files:")
-        for f in sorted_files:
-            log_info(f"- {os.path.basename(f)}")
+        for item in sql_data:
+            log_info(f"- {item['name']} (Priority: {item['priority']})")
 
-        for sql_file in sorted_files:
-            execute_sql_file(cursor, sql_file)
+        for item in sql_data:
+            try:
+                # Split the script into individual commands, separated by 'GO'
+                sql_commands = item['content'].split('GO')
+                for command in sql_commands:
+                    if command.strip():
+                        cursor.execute(command)
+                log_info(f"Successfully executed {item['name']}", source=SOURCE)
+            except Exception as e:
+                log_error(f"Error executing {item['name']}: {e}", source=SOURCE)
+                raise
         
         connection.commit()
         log_info("Database schema setup and verification finished successfully.", source=SOURCE)
+
         
     except Exception as e:
         if connection:
