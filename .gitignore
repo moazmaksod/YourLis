@@ -145,3 +145,4 @@ Thumbs.db
 # Project secrets and config
 setting/config.json
 setting/key.key
+*.key
