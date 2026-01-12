@@ -8,6 +8,7 @@ from database.sqldbdictionary import (
     SEND_OUT_SEARCH_SQL,
     INSERT_SEND_OUT_LOG_SQL,
     GET_DESTINATION_LABS_SQL,
+    UPDATE_SEND_OUT_FINANCIALS_SQL,
 )
 
 # Date format settings from patient view
@@ -128,6 +129,139 @@ def create_send_out_row(page, sample):
                 # For any other type, convert to string
                 sent_date = str(sent_date_obj)
 
+    # Controls for Price and Amount Paid to allow UI updates
+    price_text_control = ft.Text(str(sample.get("Price", "")), expand=True)
+    paid_text_control = ft.Text(str(sample.get("Amount Paid", "0")), expand=True)
+
+    # Controls for Sent Date and Status to allow UI updates
+    sent_date_text_control = ft.Text(sent_date, expand=True)
+    status_text_control = ft.Text(str(sample.get("Status", "")), expand=True)
+
+    async def edit_financials_click(e):
+        """Handles the 'Edit' button click event."""
+        price_field = ft.TextField(label="Price", value=price_text_control.value)
+        paid_field = ft.TextField(label="Amount Paid", value=paid_text_control.value)
+        
+        # Fetch labs for dropdown
+        labs = await fetch_destination_labs()
+        lab_options = [ft.dropdown.Option(text=lab.get("gehahname", ""), key=lab.get("gehahname", "")) for lab in labs]
+        
+        dest_lab_field = ft.Dropdown(
+            label="Destination Lab",
+            options=lab_options,
+            value=sample.get("Destination Lab", "")
+        )
+
+        status_field = ft.Dropdown(
+            label="Status",
+            options=[ft.dropdown.Option("Pending"), ft.dropdown.Option("Sent")],
+            value=sample.get("Status", "Pending")
+        )
+
+        async def save_financials(e):
+            try:
+                new_price = float(price_field.value)
+                new_paid = float(paid_field.value)
+            except ValueError:
+                page.snack_bar = ft.SnackBar(ft.Text("Invalid number format"), open=True)
+                page.update()
+                return
+
+            params = {
+                "PatientID": sample["Patient ID"],
+                "TestName": sample["Test Name"],
+                "Price": new_price,
+                "AmountPaid": new_paid,
+                "DestinationLab": dest_lab_field.value,
+                "EditDate": datetime.datetime.now().strftime("%d-%b-%Y %I:%M %p"),
+                "Status": status_field.value,
+            }
+
+            try:
+                # Execute update procedure
+                await exec_procedure_no_return(UPDATE_SEND_OUT_FINANCIALS_SQL, params)
+
+                # Update UI and local data
+                sample["Price"] = new_price
+                sample["Amount Paid"] = new_paid
+                sample["Destination Lab"] = dest_lab_field.value
+                sample["Status"] = status_field.value
+                
+                price_text_control.value = str(new_price)
+                paid_text_control.value = str(new_paid)
+                status_text_control.value = status_field.value
+                
+                # Update the row cells to reflect changes immediately
+                e.control.page.update()
+                
+                page.update()
+                page.close(dlg)
+            except Exception as ex:
+                log_error(f"Error updating financials: {ex}")
+                page.snack_bar = ft.SnackBar(ft.Text(f"Error: {ex}"), open=True)
+                page.update()
+
+        dlg = ft.AlertDialog(
+            title=ft.Text("Edit Financials"),
+            content=ft.Column([price_field, paid_field, dest_lab_field, status_field], tight=True, width=300),
+            actions=[ft.TextButton("Cancel", on_click=lambda e: page.close(dlg)), ft.TextButton("Save", on_click=save_financials)],
+        )
+        page.open(dlg)
+
+    # Define send_button variable for closure access
+    send_button = None
+    pay_button = None
+
+    async def pay_and_send_click(e):
+        """Handles the 'Pay' button click event."""
+        try:
+            price = float(sample.get("Price") or 0)
+            new_paid = price
+            
+            params = {
+                "PatientID": sample["Patient ID"],
+                "TestName": sample["Test Name"],
+                "Price": price,
+                "AmountPaid": new_paid,
+                "DestinationLab": sample.get("Destination Lab", ""),
+                "EditDate": datetime.datetime.now().strftime("%d-%b-%Y %I:%M %p"),
+                "Status": "Sent",
+            }
+
+            await exec_procedure_no_return(UPDATE_SEND_OUT_FINANCIALS_SQL, params)
+
+            # Update local data
+            sample["Amount Paid"] = new_paid
+            sample["Status"] = "Sent"
+            sample["Sent Date"] = datetime.datetime.now()
+
+            # Update UI controls
+            paid_text_control.value = str(new_paid)
+            status_text_control.value = "Sent"
+            sent_date_text_control.value = datetime.date.today().strftime(gui_time_format)
+
+            # Update Send button style
+            if send_button:
+                send_button.text = "Sent"
+                send_button.icon = ft.Icons.CHECK
+                send_button.bgcolor = ft.Colors.GREEN
+                send_button.color = ft.Colors.WHITE
+                send_button.disabled = True
+
+            # Update Pay button style
+            if pay_button:
+                pay_button.text = "Paid"
+                pay_button.icon = ft.Icons.CHECK
+                pay_button.bgcolor = ft.Colors.GREEN
+                pay_button.color = ft.Colors.WHITE
+                pay_button.disabled = True
+            
+            page.update()
+        except Exception as ex:
+            log_error(f"Error paying and sending: {ex}")
+            page.snack_bar = ft.SnackBar(ft.Text(f"Error: {ex}"), open=True)
+            page.update()
+
     async def mark_as_sent_click(e):
         """Handles the 'Mark as Sent' button click event."""
         try:
@@ -152,17 +286,42 @@ def create_send_out_row(page, sample):
 
             # Update the UI to reflect the change
             e.control.text = "Sent"
-            # Get the row from the button's parent cell
-            row = e.control.parent.parent
-            # Update the 'Sent Date' and 'Status' cells
-            row.cells[6].content.value = datetime.date.today().strftime(
-                gui_time_format
-            )
-            row.cells[7].content.value = "Sent"
+            e.control.icon = ft.Icons.CHECK
+            e.control.bgcolor = ft.Colors.GREEN
+            e.control.color = ft.Colors.WHITE
+            
+            # Update controls directly and local data
+            sent_date_text_control.value = datetime.date.today().strftime(gui_time_format)
+            status_text_control.value = "Sent"
+            sample["Status"] = "Sent"
+            sample["Sent Date"] = datetime.datetime.now()
             page.update()
         except Exception as ex:
             log_error(f"Error marking sample as sent: {ex}")
             page.snack_bar = ft.SnackBar(ft.Text(f"Error: {ex}"), open=True)
+
+    is_sent = sample.get("Status") == "Sent"
+    send_button = ft.ElevatedButton(
+        text="Sent" if is_sent else "Send",
+        icon=ft.Icons.CHECK if is_sent else None,
+        bgcolor=ft.Colors.GREEN if is_sent else None,
+        color=ft.Colors.WHITE if is_sent else None,
+        on_click=mark_as_sent_click,
+        disabled=is_sent,
+    )
+
+    price = float(sample.get("Price") or 0)
+    paid = float(sample.get("Amount Paid") or 0)
+    is_paid = paid >= price and price > 0
+
+    pay_button = ft.ElevatedButton(
+        text="Paid" if is_paid else "Pay",
+        icon=ft.Icons.CHECK if is_paid else None,
+        bgcolor=ft.Colors.GREEN if is_paid else None,
+        color=ft.Colors.WHITE if is_paid else None,
+        on_click=pay_and_send_click,
+        disabled=is_paid,
+    )
 
     return ft.DataRow(
         cells=[
@@ -170,16 +329,19 @@ def create_send_out_row(page, sample):
             ft.DataCell(ft.Text(str(sample.get("Name", "")), expand=True)),
             ft.DataCell(ft.Text(str(sample.get("Test Name", "")), expand=True)),
             ft.DataCell(ft.Text(str(sample.get("Destination Lab", "")), expand=True)),
-            ft.DataCell(ft.Text(str(sample.get("Price", "")), expand=True)),
-            ft.DataCell(ft.Text(str(sample.get("Amount Paid", "0")), expand=True)),
-            ft.DataCell(ft.Text(sent_date, expand=True)),
-            ft.DataCell(ft.Text(str(sample.get("Status", "")), expand=True)),
+            ft.DataCell(price_text_control),
+            ft.DataCell(paid_text_control),
+            ft.DataCell(sent_date_text_control),
+            ft.DataCell(status_text_control),
             ft.DataCell(
-                ft.ElevatedButton(
-                    text="Mark as Sent",
-                    on_click=mark_as_sent_click,
-                    disabled=(sample.get("Status") == "Sent"),
-                )
+                ft.Row(
+                    [
+                        send_button,
+                        pay_button,
+                        ft.IconButton(icon=ft.Icons.EDIT, tooltip="Edit Price/Paid", on_click=edit_financials_click),
+                    ],
+                    spacing=5,
+                ),
             ),
         ]
     )
@@ -256,6 +418,9 @@ def send_out_view(page: ft.Page):
             status_val = (
                 status_dropdown.value if status_dropdown.value != "All" else None
             )
+            destination_lab_val = (
+                destination_lab_dropdown.value if destination_lab_dropdown.value and destination_lab_dropdown.value != "All" else None
+            )
             start_date = (
                 datetime.datetime.strptime(
                     start_date_field.value, gui_time_format
@@ -273,7 +438,7 @@ def send_out_view(page: ft.Page):
             data = await fetch_send_out_data(
                 patient_id=patient_id_field.value,
                 patient_name=patient_name_field.value,
-                destination_lab=destination_lab_dropdown.value,
+                destination_lab=destination_lab_val,
                 start_date=start_date,
                 end_date=end_date,
                 status=status_val,
@@ -285,7 +450,8 @@ def send_out_view(page: ft.Page):
                 send_out_table.rows.clear()
             else:
                 log_info(f"Search completed. Found {len(data)} send-out records.")
-                send_out_table.all_data = data
+                # Convert rows to dicts to ensure mutability and avoid pyodbc.Row issues
+                send_out_table.all_data = [dict(row) for row in data]
 
             send_out_table.total_pages = max(
                 1, math.ceil(len(send_out_table.all_data) / RESULTS_PER_PAGE)
@@ -294,7 +460,6 @@ def send_out_view(page: ft.Page):
             await send_out_table.load_page(1)
             await update_pagination_display(1)
 
-        except Exception as ex:
             log_error(f"Error in send_out search_handler: {ex}")
             page.snack_bar = ft.SnackBar(ft.Text(f"Error: {ex}"), open=True)
         finally:

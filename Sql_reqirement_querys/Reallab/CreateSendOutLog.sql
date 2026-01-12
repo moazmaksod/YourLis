@@ -24,5 +24,6 @@ LEFT JOIN
 WHERE 
     pt.sentout = 1 
     AND pt.send = 1
-    AND sol.LogID IS NULL;
+    AND sol.LogID IS NULL
+    AND EXISTS (SELECT 1 FROM dbo.payment pay WHERE pay.patientid = pt.patientid AND pay.testsimp = pt.testsimp);
 GO

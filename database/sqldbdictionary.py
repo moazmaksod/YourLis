@@ -36,3 +36,9 @@ GET_DESTINATION_LABS_SQL = {
     "PROCEDURE_NAME": "dbo.GetDestinationLabs",
     "PARAMETERS": [],
 }
+
+# Used in: gui/views/send_out.py for editing Price and Amount Paid
+UPDATE_SEND_OUT_FINANCIALS_SQL = {
+    "PROCEDURE_NAME": "dbo.UpdateSendOutFinancials",
+    "PARAMETERS": ["PatientID", "TestName", "Price", "AmountPaid", "DestinationLab", "EditDate", "Status"],
+}
