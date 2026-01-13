@@ -25,16 +25,49 @@ class ServerStatusUpdater(ft.Text):
         self.page = page
 
     def did_mount(self):
-        """Initializes the updater and starts periodic server status checks upon mounting."""
-        self.running = True
+        """Initializes the updater and subscribes to server status updates upon mounting."""
         if self.page:
-            self.page.run_task(self.periodic_status_check)
+            self.page.pubsub.subscribe(self.on_pubsub_update)
+            # Initial fetch to ensure status is correct
+            self.page.run_task(self.manual_status_refresh)
 
     def will_unmount(self):
-        """
-        Stops the server status updater by setting the running flag to False.
-        """
-        self.running = False
+        """Stops the server status updater by unsubscribing from pubsub."""
+        if self.page:
+            self.page.pubsub.unsubscribe(self.on_pubsub_update)
+
+    async def manual_status_refresh(self):
+        status = await fetch_server_status()
+        await self.update_ui(status)
+
+    async def on_pubsub_update(self, message):
+        if message.get("type") == "status":
+            await self.update_ui(message.get("data"))
+
+    async def update_ui(self, status):
+        """Updates the server status and related UI components."""
+        self.server_status.update(status)
+        # Use Flet color objects for theme consistency
+        if status["state"] == "Online":
+            self.status_indicator.bgcolor = ft.Colors.GREEN_500 # Theme-friendly green
+        else:
+            self.status_indicator.bgcolor = ft.Colors.RED_500   # Theme-friendly red
+
+        self.status_indicator.tooltip = (
+            f"State: {status['state']}\nDetails: {status['text']}"
+        )
+
+        # Update the clients avatars container
+        self.clients_avatars.content = self.client_connected_avatar(
+            status["clients"]
+        )  # Update controls directly
+        self.server_button.text = (
+            "Stop Server" if status["state"] == "Online" else "Start Server"
+        )
+
+        if self.page:
+            self.page.update()
+
 
     def client_connected_avatar(self, client_dict):
         """
@@ -93,34 +126,6 @@ class ServerStatusUpdater(ft.Text):
 
         return clients_container  # Return the list of CircleAvatars
 
-    async def periodic_status_check(self):
-        """
-        Periodically checks and updates the server status and related UI components.
-        """
-        while self.running:
-            status = await fetch_server_status()  # Fetch status using the API
-            self.server_status.update(status)
-            # Use Flet color objects for theme consistency
-            if status["state"] == "Online":
-                self.status_indicator.bgcolor = ft.Colors.GREEN_500 # Theme-friendly green
-            else:
-                self.status_indicator.bgcolor = ft.Colors.RED_500   # Theme-friendly red
-
-            self.status_indicator.tooltip = (
-                f"State: {status['state']}\nDetails: {status['text']}"
-            )
-
-            # Update the clients avatars container
-            self.clients_avatars.content = self.client_connected_avatar(
-                status["clients"]
-            )  # Update controls directly
-            self.server_button.text = (
-                "Stop Server" if status["state"] == "Online" else "Start Server"
-            )
-
-            if self.page:
-                self.page.update()
-            await asyncio.sleep(5)
 
 
 async def close_app(page: ft.Page):
@@ -130,7 +135,18 @@ async def close_app(page: ft.Page):
     Args:
         page (ft.Page): The Flet page instance to be closed.
     """
-    # Perform cleanup or saving logic here if needed
-    await stop_server()
+    # Cancel the WebSocket listener task if it exists
+    if page.data and "ws_task" in page.data:
+        task = page.data["ws_task"]
+        if task:
+            task.cancel()
+            # No need to await a cancelled task unless we want to handle cleanup, but here we just want it dead.
+            try:
+                # We can try to await it to ensure it cleans up, but if it throws TypeError, we skip.
+                # Actually, task.cancel() returns bool. We shouldn't await 'task' if it's already done or if we are in a context where awaiting it is tricky.
+                # But 'task' is an asyncio.Task object. It can be awaited.
+                pass 
+            except Exception:
+                pass
 
     page.window.destroy()  # Close the app

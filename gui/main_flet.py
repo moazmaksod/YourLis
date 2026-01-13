@@ -13,6 +13,22 @@ from gui.views.send_out import send_out_view
 from gui.views.settings import settings_view
 from gui.views.about import about_view
 from gui.theme import get_app_themes, app_fonts  # Import themes and fonts
+from gui.api_methods import listen_to_updates
+from log.logger import log_info
+import asyncio
+
+
+async def start_ws_listener(page: ft.Page):
+    async def on_status_update(data):
+        page.pubsub.send_all({"type": "status", "data": data})
+
+    async def on_message_update(data):
+        page.pubsub.send_all({"type": "messages", "data": data})
+
+    try:
+        await listen_to_updates(on_status_update, on_message_update)
+    except asyncio.CancelledError:
+        log_info("WebSocket listener task cancelled.")
 
 import os
 import sys
@@ -53,6 +69,10 @@ def main(page: ft.Page):
     page.fonts = app_fonts  # Register custom fonts
 
     page.theme_mode = ft.ThemeMode.DARK if dark_mode else ft.ThemeMode.LIGHT
+
+    # Start WebSocket listener
+    ws_task = page.run_task(start_ws_listener, page)
+    page.data = {"ws_task": ws_task}
 
     # page.window.bgcolor = ft.Colors.with_opacity(0, "BLACK")
     # page.bgcolor = ft.Colors.with_opacity(0, "BLACK")

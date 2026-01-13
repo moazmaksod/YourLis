@@ -191,9 +191,11 @@ class CommunicationView(ft.Column):
         self.update()
 
     def did_mount(self):
-        self.running = True
-        self.page.run_task(self.update_loop)
-        log_info("CommunicationView mounted, starting update loop.")
+        self.page.pubsub.subscribe(self.on_pubsub_update)
+        # Initial messages fetch
+        self.page.run_task(self.manual_messages_refresh)
+        
+        log_info("CommunicationView mounted, subscribed to updates.")
         # Listen for theme changes and update all tabs
         def on_theme_change(e):
             new_theme = self.page.dark_theme if self.page.theme_mode == ft.ThemeMode.DARK else self.page.theme
@@ -201,9 +203,22 @@ class CommunicationView(ft.Column):
         self.page.on_theme_change = on_theme_change
 
     def will_unmount(self):
-        self.running = False
-        # Do NOT clear device_tabs or message_cutoff_times to persist tabs/messages across theme changes
-        log_info("CommunicationView unmounted, stopping update loop.")
+        try:
+            self.page.pubsub.unsubscribe(self.on_pubsub_update)
+        except Exception:
+            pass
+        log_info("CommunicationView unmounted, unsubscribed.")
+
+    async def manual_messages_refresh(self):
+        messages = await fetch_communication_messages()
+        if self.update_device_tabs(messages) and self.page:
+            self.page.update()
+
+    async def on_pubsub_update(self, message):
+        if message.get("type") == "messages":
+            if self.update_device_tabs(message.get("data")) and self.page:
+                self.page.update()
+
 
     def on_tab_change(self, e):
         if self.last_selected_tab is not None and len(self.tabs.tabs) > 0:
@@ -319,19 +334,6 @@ class CommunicationView(ft.Column):
             log_error(f"Error updating device tabs: {e}")
             return False
 
-    async def update_loop(self):
-        while self.running:
-            try:
-                if not self.update_pending:
-                    self.update_pending = True
-                    messages = await fetch_communication_messages()
-                    if self.update_device_tabs(messages) and self.page:
-                        self.page.update()
-                    self.update_pending = False
-            except Exception as e:
-                log_error(f"Error in update loop: {e}")
-                self.update_pending = False
-            await asyncio.sleep(1)  # Poll every 1 second for near real-time updates
 
 
 def stream_view(page: ft.Page):

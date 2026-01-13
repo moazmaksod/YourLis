@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+import asyncio
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 from server.server import start_server, stop_server, is_server_running
 from server.client_handler import clients_with_names, get_communication_messages
@@ -32,6 +33,28 @@ class CommunicationMessage(BaseModel):
             }
         }
 
+# WebSocket Connection Manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception:
+                # Connection might be dead
+                pass
+
+manager = ConnectionManager()
+
 # Endpoint to get server status
 @app.get("/server/status", response_model=ServerStatus)
 async def get_server_status():
@@ -49,6 +72,64 @@ async def get_messages():
         if msg["client_address"] is None:
             msg["client_address"] = "Unknown Client"
     return messages
+
+# WebSocket endpoint
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        # Send initial status
+        status = await get_server_status()
+        await websocket.send_json({"type": "status", "data": status.model_dump()})
+        
+        while True:
+            # Keep connection alive, can receive heartbeats here if needed
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+# Background monitor to broadcast changes
+async def monitor_changes():
+    last_state = None
+    last_clients = None
+    last_message_count = 0
+    
+    while True:
+        try:
+            state = "Online" if is_server_running() else "Offline"
+            clients = clients_with_names.copy()
+            messages = get_communication_messages()
+            message_count = len(messages)
+            
+            # Detect changes
+            state_changed = state != last_state or clients != last_clients
+            messages_changed = message_count > last_message_count
+            
+            if state_changed:
+                text = "Server is running" if state == "Online" else "Server is offline"
+                status_data = {"state": state, "text": text, "clients": clients}
+                await manager.broadcast({"type": "status", "data": status_data})
+                last_state = state
+                last_clients = clients
+                
+            if messages_changed:
+                # Send only new messages
+                new_messages = messages[last_message_count:]
+                for msg in new_messages:
+                    if msg["client_address"] is None:
+                        msg["client_address"] = "Unknown Client"
+                await manager.broadcast({"type": "messages", "data": new_messages})
+                last_message_count = message_count
+                
+        except Exception as e:
+            from log.logger import log_error
+            log_error(f"[API] Error in monitor_changes: {e}")
+            
+        await asyncio.sleep(1) # Poll internal state once per second
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(monitor_changes())
 
 # Endpoint to start the server
 @app.post("/server/start")

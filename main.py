@@ -354,9 +354,16 @@ def main():
         flet_process.join()
     except KeyboardInterrupt:
         log_info("Shutting down...")
+        flet_process.terminate()
+
     # Terminate FastAPI process on exit
+    log_info("Shutting down FastAPI server...")
     fastapi_process.terminate()
-    fastapi_process.join()
+    fastapi_process.join(timeout=3.0)
+    if fastapi_process.is_alive():
+        log_info("FastAPI process did not exit gracefully, killing...")
+    
+    log_info("Application shutdown complete.")
 
 
 if __name__ == "__main__":

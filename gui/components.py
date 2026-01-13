@@ -63,7 +63,7 @@ def server_control(page: ft.Page):
              page.snack_bar.open = True
              page.update()
 
-        await status_updater.periodic_status_check()  # Refresh status immediately after toggle
+        await status_updater.manual_status_refresh()  # Refresh status immediately after toggle
 
     # Server status indicator
     status_indicator = ft.Container(
