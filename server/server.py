@@ -20,6 +20,30 @@ stop_event = None  # Event to stop the server
 status_lock = Lock()  # Thread-safe lock for server_running
 
 
+def check_server_start_capability():
+    """
+    Check if the server can start with current config (IP and Port).
+    Raises Exception if check fails.
+    """
+    cfg = get_config()
+    server_host = cfg['SERVER_HOST']
+    server_port = cfg['SERVER_PORT']
+
+    # 1. Check IP validity/local binding
+    try:
+        # We try to bind to the specific port to see if it's available too
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((server_host, server_port))
+    except socket.error as e:
+        if e.errno == 10049: # Address not available
+             raise Exception(f"Invalid IP Address: {server_host}. Please check your network settings.")
+        elif e.errno == 10048 or e.errno == 98 : # Address in use
+             raise Exception(f"Port {server_port} is already in use at {server_host}.")
+        else:
+             raise Exception(f"Cannot bind to {server_host}:{server_port}. Error: {e}")
+
+    return True
+
 def is_valid_ip(ip):
     """
     Validate if the provided IP address is valid.
@@ -135,6 +159,14 @@ async def client_connected(reader, writer):
 
 
 async def start_server():
+    # Perform a synchronous check first to ensure we can bind.
+    # This might fail if the port is momentarily busy, but it catches configuration errors immediately.
+    try:
+        check_server_start_capability()
+    except Exception as e:
+        log_error(f"Server startup check failed: {e}", source=SOURCE)
+        raise e # Re-raise so the API can catch it
+
     # Start the server asynchronously in the background so the API endpoint can return immediately
     asyncio.create_task(run_server())
 

@@ -1,5 +1,6 @@
 import flet as ft
 from setting.config import get_config, save_config, get_available_sql_drivers
+from database.sqlconnection import test_db_connection
 
 temp_value = "change"
 changed_db_user = "Write new user"
@@ -33,7 +34,26 @@ def settings_view(page: ft.Page):
         if database_password.value != temp_value:
             setting_to_save.update({"DB_PASSWORD": database_password.value})
 
+        if database_password.value != temp_value:
+            setting_to_save.update({"DB_PASSWORD": database_password.value})
+
+        # Validate DB Connection before saving
+        try:
+            test_db_connection(setting_to_save)
+        except Exception as e:
+            # Show error and abort save
+            page.snack_bar = ft.SnackBar(
+                ft.Text(f"Failed to connect to Database: {e}"), 
+                bgcolor="red"
+            )
+            page.snack_bar.open = True
+            page.update()
+            return
+
         save_config(setting_to_save)
+        page.snack_bar = ft.SnackBar(ft.Text("Settings saved successfully!"), bgcolor="green")
+        page.snack_bar.open = True
+        page.update()
 
     def theme_change(e):
         if dark_mode.value:

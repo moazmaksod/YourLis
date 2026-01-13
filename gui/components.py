@@ -56,6 +56,13 @@ def server_control(page: ft.Page):
         result = await toggle_server_state(
             server_status["state"]
         )  # Toggle server state using the API
+        
+        message = result.get("message", "")
+        if "Failed" in message or "Exception" in message:
+             page.snack_bar = ft.SnackBar(ft.Text(message), bgcolor="red")
+             page.snack_bar.open = True
+             page.update()
+
         await status_updater.periodic_status_check()  # Refresh status immediately after toggle
 
     # Server status indicator

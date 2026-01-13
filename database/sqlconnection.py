@@ -82,3 +82,48 @@ def get_db_connection():
         # Log and re-raise exceptions for any other issues
         log_error(f"Failed to connect to database: {e}", source=SOURCE)
         raise ConnectionError(f"Failed to connect to database: {e}")
+
+
+def test_db_connection(db_params: dict) -> bool:
+    """
+    Test database connection with the provided parameters.
+    Returns True if successful, raises Exception if failed.
+    """
+    try:
+        DB_DRIVE = db_params.get("DB_DRIVE", "")
+        DB_HOST = db_params.get("DB_HOST", "")
+        DB_PORT = db_params.get("DB_PORT", "")
+        DB_NAME = db_params.get("DB_NAME", "")
+        DB_USER = db_params.get("DB_USER", "")
+        DB_PASSWORD = db_params.get("DB_PASSWORD", "")
+        DB_TYPE = db_params.get("DB_TYPE", "local")
+
+        # Determine the connection type and build the connection string
+        if DB_TYPE == "local":
+            connection_string = (
+                f"DRIVER={{{DB_DRIVE}}};" # Enclose driver in braces
+                f"SERVER={DB_HOST};"
+                f"DATABASE={DB_NAME};"
+                f"UID={DB_USER};"
+                f"PWD={DB_PASSWORD};"
+            )
+        elif DB_TYPE == "online":
+             connection_string = (
+                f"DRIVER={{{DB_DRIVE}}};"
+                f"SERVER={DB_HOST},{DB_PORT};"
+                f"DATABASE={DB_NAME};"
+                f"UID={DB_USER};"
+                f"PWD={DB_PASSWORD};"
+            )
+        else:
+            raise ValueError(f"Invalid DB_TYPE: {DB_TYPE}")
+
+        log_info(f"Testing DB connection to {DB_HOST}...", source=SOURCE)
+        
+        # Test connection with timeout
+        conn = pyodbc.connect(connection_string, timeout=3)
+        conn.close()
+        return True
+    except Exception as e:
+        log_error(f"Test connection failed: {e}", source=SOURCE)
+        raise e

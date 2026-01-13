@@ -2,6 +2,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import os
+import socket
 import json
 import base64
 import secrets
@@ -328,3 +329,15 @@ def pre_startup_check():
         )
     else:
         log_info(f"SQL Server drivers available: {drivers}", source=SOURCE)
+
+
+def validate_binding(ip_address: str) -> bool:
+    """
+    Check if we can bind to the given IP address.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((ip_address, 0))
+        return True
+    except Exception:
+        return False
