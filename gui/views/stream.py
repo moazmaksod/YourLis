@@ -4,338 +4,541 @@ from gui.api_methods import fetch_communication_messages
 import asyncio
 from collections import defaultdict
 from log.logger import log_info, log_error
+from gui.views.message_components import MessageCard, DeviceConnectionBadge
+from gui.views.stream_controls import StreamToolbar, LoadingSkeleton, EmptyState, ExportButton
 
 
-class MessageBubble(ft.Container):
-    """A theme-aware chat bubble that builds its content on initialization."""
-
-    def __init__(self, message: dict, theme: ft.Theme):
-        super().__init__()
-        self.message = message
-        self.theme = theme  # Store the passed theme object
-        self.timestamp = datetime.fromisoformat(message["timestamp"])
-
-        # Build the control's UI directly in the constructor using the provided theme.
-        is_server = self.message["direction"] == "server"
-        is_info = self.message["direction"] == "info"
-        is_error = self.message["direction"] == "error"
-
-        if is_info:
-            client_color = ft.Colors.GREY_700
-        elif is_error:
-            client_color = ft.Colors.RED_600
-        else:  # Server or Client
-            client_color = (
-                self.theme.color_scheme.primary
-                if is_server
-                else self.theme.color_scheme.secondary
-            )
-
-        message_text = ft.Container(
-            content=ft.Text(
-                self.message["message"],
-                selectable=True,
-                no_wrap=False,
-                max_lines=None,
-            ),
-            # bgcolor=self.theme.color_scheme.surface_variant,
-            padding=10,
-            border_radius=10,
-            width=350,
-        )
-
-        content_column = ft.Column(
-            controls=[
-                ft.Text(
-                    f"{self.message['client_name']} ({self.message['direction']})",
-                    weight=ft.FontWeight.BOLD,
-                    color=client_color,
-                    selectable=True,
-                ),
-                message_text,
-                ft.Text(
-                    self.timestamp.strftime("%H:%M:%S"),
-                    size=10,
-                    color=self.theme.color_scheme.on_surface_variant,
-                    selectable=True,
-                ),
-            ],
-            spacing=4,
-            alignment=(
-                ft.MainAxisAlignment.START if is_server else ft.MainAxisAlignment.END
-            ),
-            horizontal_alignment=(
-                ft.CrossAxisAlignment.START if is_server else ft.CrossAxisAlignment.END
-            ),
-            tight=True,
-        )
-
-        self.content = content_column
-        self.alignment = (
-            ft.alignment.center_left if is_server else ft.alignment.center_right
-        )
-        self.margin = ft.margin.symmetric(vertical=5)
-        self.padding = ft.padding.symmetric(horizontal=10)
-        self.width = 400
-
-
-class DeviceTab(ft.Container):
-    """A tab containing messages for a specific device."""
-
-    def __init__(self, device_name: str, page: ft.Page, theme: ft.Theme):
+class DevicePanel(ft.Container):
+    """Enhanced device message panel with search, export, and modern UI."""
+    
+    def __init__(self, device_name: str, device_address: str, page: ft.Page, theme: ft.Theme):
         super().__init__(expand=True)
-        self.message_list = ft.ListView(
-            expand=True,
-            spacing=10,
-            padding=20,
-            auto_scroll=False,
-            on_scroll=self.on_list_scroll,
-        )
-        self.content = ft.Container(
-            content=self.message_list,
-            expand=True,
-            border=ft.border.all(1, theme.color_scheme.outline if hasattr(theme, 'color_scheme') and theme.color_scheme else ft.Colors.GREY_400),
-            border_radius=8,
-            padding=10,
-        )
         self.device_name = device_name
-        self.page = page  # Still needed for checking if control is mounted
-        self.theme = theme  # Store the passed theme object
+        self.device_address = device_address
+        self.page = page
+        self.theme = theme
         self.messages = []
-        self.scroll_position = 0
-
-    def update_theme(self, new_theme):
-        self.theme = new_theme
-        if hasattr(self, "message_list") and getattr(self, "message_list", None) and getattr(self.message_list, "controls", None):
-            for i, msg in enumerate(self.messages):
-                if i < len(self.message_list.controls) and hasattr(self.message_list.controls[i], 'theme'):
-                    self.message_list.controls[i].theme = new_theme
-            self.update_messages(self.messages)
-
+        self.filtered_messages = []
+        self.search_query = ""
+        self.auto_scroll_enabled = True
+        self.is_loading = True
+        
+        # Message list view
         self.message_list = ft.ListView(
             expand=True,
-            spacing=10,
+            spacing=12,
             padding=20,
-            auto_scroll=False,
-            on_scroll=self.on_list_scroll,
+            auto_scroll=True,
         )
-
-        # Build UI directly in constructor using the provided theme.
-        self.content = ft.Container(
-            content=self.message_list,
+        
+        # Toolbar
+        self.toolbar = StreamToolbar(
+            page=page,
+            theme=theme,
+            on_search_change=self._on_search_change,
+            on_export=self._on_export,
+            on_auto_scroll_toggle=self._on_auto_scroll_toggle,
+            on_clear_messages=self._on_clear_messages
+        )
+        
+        # Device connection badge
+        self.connection_badge = DeviceConnectionBadge(
+            device_name=device_name,
+            device_address=device_address,
+            is_connected=True,
+            theme=theme
+        )
+        
+        # Loading skeleton
+        self.loading_skeleton = LoadingSkeleton(theme)
+        
+        # Empty state
+        self.empty_state = EmptyState(
+            theme=theme,
+            message=f"No messages for {device_name}"
+        )
+        
+        # Main content container
+        self.message_container = ft.Container(
+            content=self.loading_skeleton,
             expand=True,
-            border=ft.border.all(1, self.theme.color_scheme.outline),
+            border=ft.border.all(1, theme.color_scheme.outline),
             border_radius=8,
             padding=10,
+            bgcolor=ft.Colors.with_opacity(0.01, theme.color_scheme.on_surface)
         )
-
-    def on_list_scroll(self, e: ft.ScrollEvent):
-        self.scroll_position = e.pixels
-
-    def update_messages(self, messages: list):
-        sorted_messages = sorted(messages, key=lambda x: x["timestamp"])
-
-        if sorted_messages != self.messages:
-            current_scroll = self.scroll_position
-            self.messages = sorted_messages.copy()
-            # Pass the theme object to the MessageBubble
-            self.message_list.controls = [
-                MessageBubble(msg, self.theme) for msg in sorted_messages
+        
+        # Build layout
+        self.content = ft.Column(
+            controls=[
+                self.connection_badge,
+                self.toolbar,
+                self.message_container,
+            ],
+            spacing=12,
+            expand=True
+        )
+    
+    def update_theme(self, new_theme: ft.Theme):
+        """Update theme for all components."""
+        self.theme = new_theme
+        # Rebuild all messages with new theme
+        if self.messages:
+            self.update_messages(self.messages)
+    
+    def _on_search_change(self, query: str):
+        """Handle search query change."""
+        self.search_query = query.lower()
+        self._filter_messages()
+    
+    def _filter_messages(self):
+        """Filter messages based on search query."""
+        if not self.search_query:
+            self.filtered_messages = self.messages
+        else:
+            self.filtered_messages = [
+                msg for msg in self.messages
+                if self.search_query in msg["message"].lower()
+                or self.search_query in msg["client_name"].lower()
+                or self.search_query in msg["direction"].lower()
             ]
-
-            # Check if the ListView itself is on the page before scrolling.
-            if self.message_list.page:
-                self.message_list.scroll_to(offset=current_scroll, duration=0)
-
+        
+        self._refresh_message_list()
+    
+    def _refresh_message_list(self):
+        """Refresh the message list view."""
+        if not self.filtered_messages:
+            # Show empty state
+            self.message_container.content = self.empty_state
+        else:
+            # Show messages
+            self.message_list.controls = [
+                MessageCard(msg, self.theme, on_copy=self._copy_to_clipboard)
+                for msg in self.filtered_messages
+            ]
+            self.message_container.content = self.message_list
+            
+            # Auto-scroll to bottom if enabled
+            if self.auto_scroll_enabled and self.message_list.page:
+                self.page.run_task(self._scroll_to_bottom)
+        
+        self.is_loading = False
+        self.update()
+    
+    async def _scroll_to_bottom(self):
+        """Scroll to the bottom of the message list."""
+        await asyncio.sleep(0.1)  # Small delay to ensure rendering
+        if self.message_list.page:
+            self.message_list.scroll_to(offset=-1, duration=300)
+    
+    def _on_auto_scroll_toggle(self, enabled: bool):
+        """Handle auto-scroll toggle."""
+        self.auto_scroll_enabled = enabled
+        if enabled:
+            self.page.run_task(self._scroll_to_bottom)
+    
+    def _on_clear_messages(self):
+        """Clear all messages."""
+        self.messages = []
+        self.filtered_messages = []
+        self._refresh_message_list()
+    
+    def _on_export(self):
+        """Export messages to CSV."""
+        if not self.messages:
+            self._show_snackbar("No messages to export", error=True)
+            return
+        
+        try:
+            filepath = ExportButton.export_to_csv(
+                messages=self.messages,
+                device_name=self.device_name
+            )
+            self._show_snackbar(f"Exported to {filepath}")
+        except Exception as e:
+            log_error(f"Export failed: {e}")
+            self._show_snackbar(f"Export failed: {str(e)}", error=True)
+    
+    def _copy_to_clipboard(self, text: str):
+        """Copy text to clipboard."""
+        self.page.set_clipboard(text)
+        self._show_snackbar("Copied to clipboard")
+    
+    def _show_snackbar(self, message: str, error: bool = False):
+        """Show a snackbar notification."""
+        snackbar = ft.SnackBar(
+            content=ft.Text(message),
+            bgcolor=self.theme.color_scheme.error if error else self.theme.color_scheme.primary,
+            duration=3000
+        )
+        self.page.overlay.append(snackbar)
+        snackbar.open = True
+        self.page.update()
+    
+    def update_messages(self, messages: list):
+        """Update the message list."""
+        sorted_messages = sorted(messages, key=lambda x: x["timestamp"])
+        
+        if sorted_messages != self.messages:
+            self.messages = sorted_messages.copy()
+            self._filter_messages()
             return True
         return False
+    
+    def update_connection_status(self, is_connected: bool):
+        """Update the connection status badge."""
+        self.connection_badge = DeviceConnectionBadge(
+            device_name=self.device_name,
+            device_address=self.device_address,
+            is_connected=is_connected,
+            theme=self.theme
+        )
+        self.content.controls[0] = self.connection_badge
+        self.update()
 
 
-class TabInfo:
-    """Helper class to store tab information"""
+class DevicePanelInfo:
+    """Helper class to store device panel information."""
+    
+    def __init__(self, panel: DevicePanel, container: ft.Container, collapse_button: ft.IconButton):
+        self.panel = panel
+        self.container = container
+        self.collapse_button = collapse_button
+        self.is_collapsed = False
 
-    def __init__(self, tab: ft.Tab, content: DeviceTab):
-        self.tab = tab
-        self.content = content
 
-
-class CommunicationView(ft.Column):
-    """Main view for device-server communication (streaming)"""
-
+class StreamPage(ft.Column):
+    """Main stream page with multi-view layout for device communication."""
+    
     def __init__(self, page: ft.Page):
         super().__init__(expand=True)
         self.page = page
-        self.tabs = ft.Tabs(
-            selected_index=0,
-            animation_duration=300,
-            expand=True,
-            on_change=self.on_tab_change,
-        )
-        self.running = False
-        self.device_tabs = {}
-        self.message_cutoff_times = {}
-        self.update_pending = False
-        self.last_selected_tab = None
-
-        # FIX: Determine the active theme once during initialization.
+        
+        # Determine active theme
         self.active_theme = (
             page.dark_theme if page.theme_mode == ft.ThemeMode.DARK else page.theme
         )
-
-        self.controls = [self.tabs]
-
-    def update_all_tab_themes(self, new_theme):
-        for tab_info in self.device_tabs.values():
-            tab_info.content.update_theme(new_theme)
-        self.active_theme = new_theme
-        self.update()
-
-    def did_mount(self):
-        self.page.pubsub.subscribe(self.on_pubsub_update)
-        # Initial messages fetch
-        self.page.run_task(self.manual_messages_refresh)
         
-        log_info("CommunicationView mounted, subscribed to updates.")
-        # Listen for theme changes and update all tabs
+        # Device panels storage
+        self.device_panels = {}  # device_address -> DevicePanelInfo
+        self.message_cutoff_times = {}  # device_address -> datetime
+        
+        # Container for all device panels (vertical stack)
+        self.devices_container = ft.ListView(
+            expand=True,
+            spacing=16,
+            padding=20,
+            auto_scroll=False
+        )
+        
+        # Page header
+        self.header = ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Icon(
+                        ft.Icons.STREAM,
+                        size=32,
+                        color=self.active_theme.color_scheme.primary
+                    ),
+                    ft.Column(
+                        controls=[
+                            ft.Text(
+                                "Communication Stream",
+                                size=20,
+                                weight=ft.FontWeight.BOLD,
+                                color=self.active_theme.color_scheme.on_surface
+                            ),
+                            ft.Text(
+                                "Real-time device communication monitoring",
+                                size=12,
+                                color=self.active_theme.color_scheme.on_surface_variant
+                            )
+                        ],
+                        spacing=2,
+                        tight=True
+                    ),
+                    ft.Container(expand=True),
+                    ft.Text(
+                        f"Active Devices: {len(self.device_panels)}",
+                        size=14,
+                        color=self.active_theme.color_scheme.secondary,
+                        weight=ft.FontWeight.W_500
+                    )
+                ],
+                spacing=12,
+                alignment=ft.MainAxisAlignment.START,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER
+            ),
+            padding=ft.padding.all(16),
+            bgcolor=ft.Colors.with_opacity(0.03, self.active_theme.color_scheme.on_surface),
+            border=ft.border.all(1, self.active_theme.color_scheme.outline),
+            border_radius=8,
+            margin=ft.margin.only(bottom=16)
+        )
+        
+        # Empty state for no devices
+        self.no_devices_state = EmptyState(
+            theme=self.active_theme,
+            message="No devices connected"
+        )
+        
+        # Main content
+        self.main_content = ft.Container(
+            content=self.no_devices_state,
+            expand=True
+        )
+        
+        # Build page layout
+        self.controls = [
+            self.header,
+            self.main_content
+        ]
+    
+    def did_mount(self):
+        """Called when the view is mounted."""
+        self.page.pubsub.subscribe(self._on_messages_broadcast)
+        self.page.run_task(self._initial_messages_fetch)
+        log_info("StreamPage mounted and subscribed to updates")
+        
+        # Listen for theme changes
         def on_theme_change(e):
-            new_theme = self.page.dark_theme if self.page.theme_mode == ft.ThemeMode.DARK else self.page.theme
-            self.update_all_tab_themes(new_theme)
+            new_theme = (
+                self.page.dark_theme 
+                if self.page.theme_mode == ft.ThemeMode.DARK 
+                else self.page.theme
+            )
+            self._update_all_themes(new_theme)
+        
         self.page.on_theme_change = on_theme_change
-
+    
     def will_unmount(self):
+        """Called when the view is unmounted."""
         try:
-            self.page.pubsub.unsubscribe(self.on_pubsub_update)
+            self.page.pubsub.unsubscribe(self._on_messages_broadcast)
         except Exception:
             pass
-        log_info("CommunicationView unmounted, unsubscribed.")
-
-    async def manual_messages_refresh(self):
+        log_info("StreamPage unmounted and unsubscribed")
+    
+    async def _initial_messages_fetch(self):
+        """Fetch initial messages."""
         messages = await fetch_communication_messages()
-        if self.update_device_tabs(messages) and self.page:
-            self.page.update()
-
-    async def on_pubsub_update(self, message):
-        if message.get("type") == "messages":
-            if self.update_device_tabs(message.get("data")) and self.page:
-                self.page.update()
-
-
-    def on_tab_change(self, e):
-        if self.last_selected_tab is not None and len(self.tabs.tabs) > 0:
-            new_tab_info = None
-            if self.tabs.selected_index < len(self.tabs.tabs):
-                selected_tab_control = self.tabs.tabs[self.tabs.selected_index]
-                for tab_info in self.device_tabs.values():
-                    if tab_info.tab == selected_tab_control:
-                        new_tab_info = tab_info
-                        break
-
-            # Check if the tab's content has a page object, which confirms it's mounted.
-            if new_tab_info and new_tab_info.content.page:
-                new_tab_info.content.message_list.scroll_to(
-                    offset=new_tab_info.content.scroll_position, duration=0
-                )
-
-        self.last_selected_tab = self.tabs.selected_index
-
-    def close_tab(self, device_address: str):
-        if device_address in self.device_tabs:
-            tab_info = self.device_tabs.pop(device_address)
-            if tab_info.tab in self.tabs.tabs:
-                self.tabs.tabs.remove(tab_info.tab)
-            self.message_cutoff_times[device_address] = datetime.now()
-
-            if self.tabs.tabs and self.tabs.selected_index >= len(self.tabs.tabs):
-                self.tabs.selected_index = len(self.tabs.tabs) - 1
-
+        if self._update_device_panels(messages):
             self.update()
-
-    def get_device_tab(self, device_name: str, device_address: str) -> TabInfo:
-        if device_address not in self.device_tabs:
-            # Always use only device_address as the key, not theme
-            device_tab_content = DeviceTab(device_name, self.page, self.active_theme)
-
-            new_tab_index = len(self.device_tabs) + 1
-            tab_text = ft.Row(
-                controls=[
-                    ft.Text(f"{new_tab_index} - {device_name}"),
-                    ft.IconButton(
-                        icon=ft.Icons.CLOSE,
-                        icon_size=14,
-                        on_click=lambda _, addr=device_address: self.close_tab(addr),
-                        style=ft.ButtonStyle(
-                            color={"hovered": ft.Colors.RED_700}, padding=5
-                        ),
-                    ),
-                ],
-                spacing=5,
-                alignment=ft.MainAxisAlignment.CENTER,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    
+    def _on_messages_broadcast(self, message):
+        """Handle PubSub messages."""
+        if self.page and message.get("type") == "messages":
+            self.page.run_task(self._handle_messages_update, message.get("data"))
+    
+    async def _handle_messages_update(self, data):
+        """Handle incoming message updates."""
+        if self._update_device_panels(data):
+            self.update()
+    
+    def _close_panel(self, device_address: str):
+        """Close a device panel."""
+        if device_address in self.device_panels:
+            panel_info = self.device_panels.pop(device_address)
+            
+            # Remove from container
+            if panel_info.container in self.devices_container.controls:
+                self.devices_container.controls.remove(panel_info.container)
+            
+            # Record cutoff time
+            self.message_cutoff_times[device_address] = datetime.now()
+            
+            # Update device count in header
+            self._update_header()
+            
+            # Show empty state if no panels
+            if not self.device_panels:
+                self.main_content.content = self.no_devices_state
+            
+            self.update()
+    
+    def _get_device_panel(self, device_name: str, device_address: str) -> DevicePanelInfo:
+        """Get or create a device panel."""
+        if device_address not in self.device_panels:
+            # Create new device panel
+            device_panel = DevicePanel(
+                device_name=device_name,
+                device_address=device_address,
+                page=self.page,
+                theme=self.active_theme
             )
-
-            tab = ft.Tab(tab_content=tab_text, content=device_tab_content)
-
-            tab_info = TabInfo(tab=tab, content=device_tab_content)
-            self.device_tabs[device_address] = tab_info
-
-            self.tabs.tabs.append(tab)
-            # This update is crucial to ensure the new tab is rendered before any further actions.
+            
+            # Create collapse toggle function
+            def toggle_collapse(e, addr=device_address):
+                if addr in self.device_panels:
+                    panel_info = self.device_panels[addr]
+                    panel_info.is_collapsed = not panel_info.is_collapsed
+                    
+                    # Toggle visibility of device panel
+                    panel_column = panel_info.container.content
+                    if panel_info.is_collapsed:
+                        # Hide the panel, show only header
+                        panel_column.controls = [panel_column.controls[0]]  # Keep header only
+                        panel_info.collapse_button.icon = ft.Icons.EXPAND_MORE
+                        panel_info.collapse_button.tooltip = "Expand"
+                    else:
+                        # Show full panel
+                        panel_column.controls = [panel_column.controls[0], panel_info.panel]
+                        panel_info.collapse_button.icon = ft.Icons.EXPAND_LESS
+                        panel_info.collapse_button.tooltip = "Collapse"
+                    
+                    self.page.update()
+            
+            # Create collapse/expand button
+            collapse_button = ft.IconButton(
+                icon=ft.Icons.EXPAND_LESS,
+                icon_size=20,
+                on_click=toggle_collapse,
+                tooltip="Collapse",
+                icon_color=self.active_theme.color_scheme.primary
+            )
+            
+            # Create panel header with collapsible section
+            panel_header = ft.Container(
+                content=ft.Row(
+                    controls=[
+                        collapse_button,
+                        ft.Text(
+                            f"{len(self.device_panels) + 1}. {device_name}",
+                            size=16,
+                            weight=ft.FontWeight.BOLD,
+                            color=self.active_theme.color_scheme.on_surface
+                        ),
+                        ft.Text(
+                            f"({device_address})",
+                            size=12,
+                            color=self.active_theme.color_scheme.on_surface_variant
+                        ),
+                        ft.Container(expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.CLOSE,
+                            icon_size=18,
+                            on_click=lambda _, addr=device_address: self._close_panel(addr),
+                            tooltip="Hide device",
+                            icon_color=self.active_theme.color_scheme.error
+                        )
+                    ],
+                    alignment=ft.MainAxisAlignment.START,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER
+                ),
+                bgcolor=ft.Colors.with_opacity(0.05, self.active_theme.color_scheme.primary),
+                padding=ft.padding.symmetric(horizontal=16, vertical=12),
+                border_radius=ft.border_radius.only(top_left=8, top_right=8)
+            )
+            
+            # Wrap panel in container with header
+            panel_container = ft.Container(
+                content=ft.Column(
+                    controls=[
+                        panel_header,
+                        device_panel
+                    ],
+                    spacing=0,
+                    tight=True
+                ),
+                border=ft.border.all(1, self.active_theme.color_scheme.outline),
+                border_radius=8,
+                animate=ft.animation.Animation(300, ft.AnimationCurve.EASE_OUT)
+            )
+            
+            # Store panel info
+            panel_info = DevicePanelInfo(panel=device_panel, container=panel_container, collapse_button=collapse_button)
+            self.device_panels[device_address] = panel_info
+            
+            # Store device name for update tracking
+            panel_info.device_name = device_name
+            # Store reference to header text controls for updating
+            panel_info.header_text = panel_header.content.controls[1]  # The device name text control
+            
+            # Add to devices container
+            self.devices_container.controls.append(panel_container)
+            
+            # Update main content to show devices
+            self.main_content.content = self.devices_container
+            
+            # Update header
+            self._update_header()
+            
+            # Force update
             self.page.update()
         else:
-            # Update tab name if device_name has changed
-            tab_info = self.device_tabs[device_address]
-            tab_row = tab_info.tab.tab_content
-            # tab_row.controls[0] is the ft.Text for the device name
-            current_label = (
-                tab_row.controls[0].value
-                if hasattr(tab_row.controls[0], "value")
-                else tab_row.controls[0].text
-            )
-            new_tab_index = list(self.device_tabs.keys()).index(device_address) + 1
-            new_label = f"{new_tab_index} - {device_name}"
-            if current_label != new_label:
-                if hasattr(tab_row.controls[0], "value"):
-                    tab_row.controls[0].value = new_label
-                else:
-                    tab_row.controls[0].text = new_label
-                self.page.update()
-        return self.device_tabs[device_address]
+            # Panel exists - check if device name has changed and update header if needed
+            panel_info = self.device_panels[device_address]
+            if hasattr(panel_info, 'device_name') and panel_info.device_name != device_name:
+                # Device name changed - update header text
+                panel_info.device_name = device_name
+                panel_index = list(self.device_panels.keys()).index(device_address) + 1
+                panel_info.header_text.value = f"{panel_index}. {device_name}"
+                log_info(f"Updated device panel header for {device_address}: {device_name}")
 
-    def filter_new_messages(self, messages: list) -> dict:
+        
+        return self.device_panels[device_address]
+    
+    def _filter_new_messages(self, messages: list) -> dict:
+        """Filter messages by cutoff time."""
         device_messages = defaultdict(list)
         for msg in messages:
             if client_address := msg.get("client_address"):
                 msg_timestamp = datetime.fromisoformat(msg["timestamp"])
                 cutoff_time = self.message_cutoff_times.get(client_address)
+                
                 if not cutoff_time or msg_timestamp > cutoff_time:
                     device_messages[client_address].append(msg)
+        
         return device_messages
-
-    def update_device_tabs(self, messages: list):
+    
+    def _update_device_panels(self, messages: list) -> bool:
+        """Update device panels with new messages."""
         try:
             if not messages:
                 return False
-
-            device_messages = self.filter_new_messages(messages)
+            
+            device_messages = self._filter_new_messages(messages)
             updated = False
-
+            
             for client_address, device_msgs in device_messages.items():
                 if device_msgs:
                     device_name = device_msgs[-1]["client_name"]
-                    tab_info = self.get_device_tab(device_name, client_address)
-                    # Only add truly new messages (by timestamp)
-                    existing_timestamps = set(msg["timestamp"] for msg in tab_info.content.messages)
-                    new_msgs = [msg for msg in device_msgs if msg["timestamp"] not in existing_timestamps]
+                    panel_info = self._get_device_panel(device_name, client_address)
+                    
+                    # Only add truly new messages
+                    existing_timestamps = set(
+                        msg["timestamp"] for msg in panel_info.panel.messages
+                    )
+                    new_msgs = [
+                        msg for msg in device_msgs 
+                        if msg["timestamp"] not in existing_timestamps
+                    ]
+                    
                     if new_msgs:
-                        tab_info.content.update_messages(tab_info.content.messages + new_msgs)
+                        all_messages = panel_info.panel.messages + new_msgs
+                        panel_info.panel.update_messages(all_messages)
                         updated = True
+            
             return updated
         except Exception as e:
             log_error(f"Error updating device tabs: {e}")
             return False
-
+    
+    def _update_header(self):
+        """Update the header with current device count."""
+        device_count_text = self.header.content.controls[3]
+        device_count_text.value = f"Active Devices: {len(self.device_panels)}"
+    
+    def _update_all_themes(self, new_theme: ft.Theme):
+        """Update theme for all components."""
+        self.active_theme = new_theme
+        
+        for panel_info in self.device_panels.values():
+            panel_info.panel.update_theme(new_theme)
+        
+        self.update()
 
 
 def stream_view(page: ft.Page):
-    """Create the communication view"""
-    return CommunicationView(page)
+    """Create and return the stream view."""
+    return StreamPage(page)

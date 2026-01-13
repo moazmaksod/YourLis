@@ -83,13 +83,13 @@ def server_control(page: ft.Page):
 
     # Server status updater
     status_updater = ServerStatusUpdater(
-        status_indicator, server_button, server_status, clients_avatars, page
+        status_indicator, server_button, server_status, clients_avatars
     )
 
     divider = ft.Text("     ")
 
     # App header layout
-    return ft.Row(
+    header_row = ft.Row(
         controls=[
             status_updater,
             ft.Row(
@@ -107,6 +107,9 @@ def server_control(page: ft.Page):
         ],
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
     )
+    
+    # Return both the UI and the status_updater instance for manual subscription setup
+    return header_row, status_updater
 
 
 def side_menu(on_item_click):

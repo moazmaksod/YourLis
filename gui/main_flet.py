@@ -20,7 +20,12 @@ import asyncio
 
 async def start_ws_listener(page: ft.Page):
     async def on_status_update(data):
+        # Send via PubSub for other listeners
         page.pubsub.send_all({"type": "status", "data": data})
+        
+        # ALSO directly call ServerStatusUpdater to bypass PubSub subscription issues
+        if hasattr(page, 'server_status_updater') and page.server_status_updater:
+            page.run_task(page.server_status_updater.update_ui, data)
 
     async def on_message_update(data):
         page.pubsub.send_all({"type": "messages", "data": data})
@@ -169,6 +174,17 @@ def main(page: ft.Page):
         current_view.controls.append(cached_views[view_key])
         page.update()
 
+    # Create server control once  (before adding to page) to prevent re-creation during navigation
+    # server_control now returns (UI, status_updater) tuple
+    server_control_ui, server_status_updater_ref = server_control(page)
+    
+    # Store ServerStatusUpdater reference in page for direct access from WebSocket listener
+    page.server_status_updater = server_status_updater_ref
+    
+    # Manually setup PubSub subscription at page level (not component level)
+    # This prevents subscription from being lost during page navigation
+    server_status_updater_ref.setup_subscription(page)
+    
     # title bar container
     title_bar_container = ft.Container(
         title_bar(
@@ -188,7 +204,7 @@ def main(page: ft.Page):
                     ft.Container(  # Wrap the right-side content
                         content=ft.Column(
                             controls=[
-                                ft.Container(content=server_control(page)),
+                                ft.Container(content=server_control_ui),
                                 ft.Container(
                                     content=current_view, expand=True
                                 ),  # Ensure it stretches

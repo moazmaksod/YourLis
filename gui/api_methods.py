@@ -146,9 +146,12 @@ async def listen_to_updates(on_status_update, on_message_update):
                     msg_type = data.get("type")
                     msg_data = data.get("data")
                     
+                    
                     if msg_type == "status":
+                        log_info(f"[WebSocket] Received status update: {msg_data.get('clients', 'No Clients Key')}")
                         await on_status_update(msg_data)
                     elif msg_type == "messages":
+                        log_info(f"[WebSocket] Received message update: {len(msg_data)} messages")
                         await on_message_update(msg_data)
         except Exception as e:
             log_error(f"[API_METHODS] WebSocket error: {e}. Retrying in 5s...")

@@ -98,6 +98,9 @@ async def monitor_changes():
         try:
             state = "Online" if is_server_running() else "Offline"
             clients = clients_with_names.copy()
+            if len(clients) > 0:
+                from log.logger import log_info
+                log_info(f"[API] Monitor sees clients: {list(clients.keys())}")
             messages = get_communication_messages()
             message_count = len(messages)
             

@@ -15,56 +15,63 @@ class ServerStatusUpdater(ft.Text):
     """
 
     def __init__(
-        self, status_indicator, server_button, server_status, clients_avatars, page
+        self, status_indicator, server_button, server_status, clients_avatars
     ):
         super().__init__()
         self.status_indicator = status_indicator
         self.server_button = server_button
         self.server_status = server_status
         self.clients_avatars = clients_avatars
-        self.page = page
 
-    def did_mount(self):
-        """Initializes the updater and subscribes to server status updates upon mounting."""
+    def setup_subscription(self, page):
+        """Manually set up PubSub subscription - called once from main.py"""
+        self.page = page
         if self.page:
-            self.page.pubsub.subscribe(self.on_pubsub_update)
+            self.page.pubsub.subscribe(self.on_status_broadcast)
+            self._is_subscribed = True
             # Initial fetch to ensure status is correct
             self.page.run_task(self.manual_status_refresh)
-
-    def will_unmount(self):
-        """Stops the server status updater by unsubscribing from pubsub."""
-        if self.page:
-            self.page.pubsub.unsubscribe(self.on_pubsub_update)
 
     async def manual_status_refresh(self):
         status = await fetch_server_status()
         await self.update_ui(status)
 
-    async def on_pubsub_update(self, message):
-        if message.get("type") == "status":
-            await self.update_ui(message.get("data"))
+    def on_status_broadcast(self, message):
+        """Synchronous wrapper for pubsub to avoid async dispatch issues."""
+        if not hasattr(self, '_is_subscribed'):
+            self._is_subscribed = False
+        
+        if not self._is_subscribed and self.page:
+            self._is_subscribed = True
+        
+        if self.page and message.get("type") == "status":
+            self.page.run_task(self.handle_status_update, message.get("data"))
+
+    async def handle_status_update(self, data):
+        """Handles status updates received via PubSub or direct WebSocket call."""
+        await self.update_ui(data)
 
     async def update_ui(self, status):
         """Updates the server status and related UI components."""
         self.server_status.update(status)
         # Use Flet color objects for theme consistency
         if status["state"] == "Online":
-            self.status_indicator.bgcolor = ft.Colors.GREEN_500 # Theme-friendly green
+            self.status_indicator.bgcolor = ft.Colors.GREEN_500
         else:
-            self.status_indicator.bgcolor = ft.Colors.RED_500   # Theme-friendly red
+            self.status_indicator.bgcolor = ft.Colors.RED_500
 
         self.status_indicator.tooltip = (
             f"State: {status['state']}\nDetails: {status['text']}"
         )
 
         # Update the clients avatars container
-        self.clients_avatars.content = self.client_connected_avatar(
-            status["clients"]
-        )  # Update controls directly
+        self.clients_avatars.content = self.client_connected_avatar(status["clients"])
+        
         self.server_button.text = (
             "Stop Server" if status["state"] == "Online" else "Start Server"
         )
 
+        # Use page-level update
         if self.page:
             self.page.update()
 
@@ -83,7 +90,12 @@ class ServerStatusUpdater(ft.Text):
 
         for client in client_dict:
             device_name = client_dict[client]
-            device_ip, device_port = client.split(",")
+            
+            # Safe parsing of the client address (expected "IP,Port")
+            if "," in client:
+                device_ip, device_port = client.split(",")
+            else:
+                device_ip, device_port = client, "Unknown"
 
             if device_name == None:
                 device_name = "Unknown Device"
@@ -91,7 +103,7 @@ class ServerStatusUpdater(ft.Text):
             if device_name in SUPPORTED_DEVICES:
                 img_url = f'assets/logo/{device_name.lower()}.png'
             else:
-                img_url = "assets/images/default_device.png"  # Default image URL if device name is not supported
+                img_url = "assets/images/default_device.png"
 
             tooltip_text = f"Name: {device_name}\nIP: {device_ip}\nPort: {device_port}"
 

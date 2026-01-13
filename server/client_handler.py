@@ -29,7 +29,12 @@ def add_communication_message(client_address, message, direction):
     """
     Add a message to the communication queue
     """
-    client_name = clients_with_names.get(client_address)
+    # Ensure client_address is a string for lookup
+    addr_key = client_address
+    if isinstance(client_address, tuple):
+        addr_key = f"{client_address[0]},{client_address[1]}"
+    
+    client_name = clients_with_names.get(addr_key)
     if client_name is None:
         # If no name is assigned, use the address as string
         if isinstance(client_address, tuple):
@@ -41,7 +46,7 @@ def add_communication_message(client_address, message, direction):
     msg = {
         "timestamp": datetime.now().isoformat(),
         "client_name": client_name,
-        "client_address": str(client_address),  # Store address as string"
+        "client_address": addr_key, # Store address as string
         "message": message.decode() if isinstance(message, bytes) else str(message),
         "direction": direction,
     }
@@ -63,13 +68,19 @@ async def handle_client_connection(reader, writer):
         reader (StreamReader): StreamReader for reading client data.
         writer (StreamWriter): StreamWriter for sending data to the client.
     """
-    client_address = writer.get_extra_info("peername")
+    peername = writer.get_extra_info("peername")
+    if isinstance(peername, tuple):
+        client_address = f"{peername[0]},{peername[1]}"
+    else:
+        client_address = str(peername)
+
     log_info(f"Client connected: {client_address}", source=SOURCE)
     add_communication_message(client_address, "Connected", "info")
 
     clients_with_names.update(
         {client_address: None}
     )  # Initialize the client with no name
+    log_info(f"Updated clients_with_names. Current keys: {list(clients_with_names.keys())}", source=SOURCE)
 
     # Register the client in the active clients dictionary
     clients[client_address] = writer
