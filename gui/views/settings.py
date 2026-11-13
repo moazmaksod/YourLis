@@ -1,10 +1,9 @@
 import flet as ft
 from setting.config import get_config, save_config, get_available_sql_drivers
-from database.sqlconnection import test_db_connection
+from gui.api_methods import test_db_connection_api as test_db_connection
 
 temp_value = "change"
-changed_db_user = "Write new user"
-changed_db_password = "Write new password"
+PASSWORD_PLACEHOLDER = "********"
 
 
 def settings_view(page: ft.Page):
@@ -28,14 +27,18 @@ def settings_view(page: ft.Page):
             "DB_NAME": database_name.value,
         }
 
-        if database_user.value != temp_value:
+        if database_user.value and database_user.value != temp_value:
             setting_to_save.update({"DB_USER": database_user.value})
 
-        if database_password.value != temp_value:
+        # Only update password if explicitly changed from placeholder
+        if (
+            database_password.value
+            and database_password.value != PASSWORD_PLACEHOLDER
+            and database_password.value != temp_value
+        ):
             setting_to_save.update({"DB_PASSWORD": database_password.value})
-
-        if database_password.value != temp_value:
-            setting_to_save.update({"DB_PASSWORD": database_password.value})
+        else:
+            setting_to_save.update({"DB_PASSWORD": cfg.get("DB_PASSWORD", "")})
 
         # Validate DB Connection before saving
         try:
@@ -60,39 +63,6 @@ def settings_view(page: ft.Page):
             page.theme_mode = ft.ThemeMode.DARK
         else:
             page.theme_mode = ft.ThemeMode.LIGHT
-        page.update()
-
-    def show_user(e):
-        # show hidden password
-        if e.control.icon == ft.Icons.REMOVE_RED_EYE_OUTLINED:
-            # show password value
-            database_user.password = False
-            e.control.icon = ft.Icons.REMOVE_RED_EYE
-            page.update()
-        elif e.control.icon == ft.Icons.REMOVE_RED_EYE:
-            # hide password value
-            database_user.password = True
-            e.control.icon = ft.Icons.REMOVE_RED_EYE_OUTLINED
-            page.update()
-
-    def show_password(e):
-        # show hidden password
-        if e.control.icon == ft.Icons.REMOVE_RED_EYE_OUTLINED:
-            # show password value
-            database_password.password = False
-            e.control.icon = ft.Icons.REMOVE_RED_EYE
-            page.update()
-        elif e.control.icon == ft.Icons.REMOVE_RED_EYE:
-            # hide password value
-            database_password.password = True
-            e.control.icon = ft.Icons.REMOVE_RED_EYE_OUTLINED
-            page.update()
-
-    def on_text_change(e):
-        if e.control.value == temp_value:
-            e.control.value = ""
-        elif e.control.value == "":
-            e.control.value = temp_value
         page.update()
 
     # Get available SQL Server drivers
@@ -136,16 +106,14 @@ def settings_view(page: ft.Page):
     database_user = ft.TextField(
         label="Database User",
         hint_text="Enter your database user",
-        password=True,
-        can_reveal_password=True,
-        value=cfg["DB_USER"],
+        value=cfg.get("DB_USER", ""),
     )
     database_password = ft.TextField(
         label="Database Password",
         hint_text="Enter your database password",
         password=True,
-        can_reveal_password=True,
-        value=cfg["DB_PASSWORD"],
+        can_reveal_password=False,
+        value=PASSWORD_PLACEHOLDER if cfg.get("DB_PASSWORD") else "",
     )
 
     application_settings = ft.Container(
@@ -194,7 +162,8 @@ def settings_view(page: ft.Page):
     )
 
     # Save button
-    save_button = ft.ElevatedButton(text="Save Settings", on_click=save_settings)
+    ButtonClass = getattr(ft, "FilledButton", getattr(ft, "ElevatedButton", ft.Button))
+    save_button = ButtonClass(text="Save Settings", on_click=save_settings)
 
     # Scrollable settings view
     return ft.Column(

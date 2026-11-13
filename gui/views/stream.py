@@ -1,4 +1,5 @@
-﻿import flet as ft
+import flet as ft
+import threading
 from datetime import datetime
 from gui.api_methods import fetch_communication_messages
 import asyncio
@@ -8,6 +9,37 @@ from gui.views.message_components import MessageCard, DeviceConnectionBadge
 from gui.views.stream_controls import StreamToolbar, LoadingSkeleton, EmptyState, ExportButton
 
 
+MAX_STREAM_MESSAGES = 200
+
+
+def _safe_border_all(width: float, color: str):
+    """Safely construct a border across Flet versions."""
+    if hasattr(ft, "Border") and hasattr(ft.Border, "all"):
+        return ft.Border.all(width, color)
+    if hasattr(ft, "border") and hasattr(ft.border, "all"):
+        return ft.border.all(width, color)
+    return None
+
+
+def _safe_margin_only(left=0, top=0, right=0, bottom=0):
+    """Safely construct margin across Flet versions."""
+    if hasattr(ft, "Margin"):
+        return ft.Margin(left=left, top=top, right=right, bottom=bottom)
+    if hasattr(ft, "margin") and hasattr(ft.margin, "only"):
+        return ft.margin.only(left=left, top=top, right=right, bottom=bottom)
+    return None
+
+
+def _safe_animation(duration: int, curve=None):
+    """Safely construct an Animation across Flet versions."""
+    anim_cls = getattr(ft, "Animation", getattr(ft, "animation", None))
+    if hasattr(anim_cls, "Animation"):
+        anim_cls = anim_cls.Animation
+    if anim_cls:
+        return anim_cls(duration, curve) if curve else anim_cls(duration)
+    return duration
+
+
 class DevicePanel(ft.Container):
     """Enhanced device message panel with search, export, and modern UI."""
     
@@ -15,8 +47,9 @@ class DevicePanel(ft.Container):
         super().__init__(expand=True)
         self.device_name = device_name
         self.device_address = device_address
-        self.page = page
+        self._page_ref = page
         self.theme = theme
+        self._lock = threading.Lock()
         self.messages = []
         self.filtered_messages = []
         self.search_query = ""
@@ -62,7 +95,7 @@ class DevicePanel(ft.Container):
         self.message_container = ft.Container(
             content=self.loading_skeleton,
             expand=True,
-            border=ft.border.all(1, theme.color_scheme.outline),
+            border=_safe_border_all(1, theme.color_scheme.outline),
             border_radius=8,
             padding=10,
             bgcolor=ft.Colors.with_opacity(0.01, theme.color_scheme.on_surface)
@@ -93,37 +126,42 @@ class DevicePanel(ft.Container):
     
     def _filter_messages(self):
         """Filter messages based on search query."""
-        if not self.search_query:
-            self.filtered_messages = self.messages
-        else:
-            self.filtered_messages = [
-                msg for msg in self.messages
-                if self.search_query in msg["message"].lower()
-                or self.search_query in msg["client_name"].lower()
-                or self.search_query in msg["direction"].lower()
-            ]
+        with self._lock:
+            if not self.search_query:
+                self.filtered_messages = list(self.messages)
+            else:
+                self.filtered_messages = [
+                    msg for msg in self.messages
+                    if self.search_query in str(msg.get("message", "")).lower()
+                    or self.search_query in str(msg.get("client_name", "")).lower()
+                    or self.search_query in str(msg.get("direction", "")).lower()
+                ]
         
         self._refresh_message_list()
     
     def _refresh_message_list(self):
         """Refresh the message list view."""
-        if not self.filtered_messages:
-            # Show empty state
-            self.message_container.content = self.empty_state
-        else:
-            # Show messages
-            self.message_list.controls = [
-                MessageCard(msg, self.theme, on_copy=self._copy_to_clipboard)
-                for msg in self.filtered_messages
-            ]
-            self.message_container.content = self.message_list
+        with self._lock:
+            if not self.filtered_messages:
+                # Show empty state
+                self.message_container.content = self.empty_state
+            else:
+                # Show messages
+                self.message_list.controls = [
+                    MessageCard(msg, self.theme, on_copy=self._copy_to_clipboard)
+                    for msg in list(self.filtered_messages)
+                ]
+                self.message_container.content = self.message_list
             
             # Auto-scroll to bottom if enabled
-            if self.auto_scroll_enabled and self.message_list.page:
-                self.page.run_task(self._scroll_to_bottom)
+            if self.auto_scroll_enabled and self._page_ref:
+                self._page_ref.run_task(self._scroll_to_bottom)
         
         self.is_loading = False
-        self.update()
+        try:
+            self.update()
+        except (RuntimeError, AssertionError):
+            pass
     
     async def _scroll_to_bottom(self):
         """Scroll to the bottom of the message list."""
@@ -134,13 +172,14 @@ class DevicePanel(ft.Container):
     def _on_auto_scroll_toggle(self, enabled: bool):
         """Handle auto-scroll toggle."""
         self.auto_scroll_enabled = enabled
-        if enabled:
-            self.page.run_task(self._scroll_to_bottom)
+        if enabled and self._page_ref:
+            self._page_ref.run_task(self._scroll_to_bottom)
     
     def _on_clear_messages(self):
         """Clear all messages."""
-        self.messages = []
-        self.filtered_messages = []
+        with self._lock:
+            self.messages = []
+            self.filtered_messages = []
         self._refresh_message_list()
     
     def _on_export(self):
@@ -161,29 +200,70 @@ class DevicePanel(ft.Container):
     
     def _copy_to_clipboard(self, text: str):
         """Copy text to clipboard."""
-        self.page.set_clipboard(text)
+        if self._page_ref:
+            self._page_ref.set_clipboard(text)
         self._show_snackbar("Copied to clipboard")
     
     def _show_snackbar(self, message: str, error: bool = False):
-        """Show a snackbar notification."""
-        snackbar = ft.SnackBar(
-            content=ft.Text(message),
-            bgcolor=self.theme.color_scheme.error if error else self.theme.color_scheme.primary,
-            duration=3000
-        )
-        self.page.overlay.append(snackbar)
-        snackbar.open = True
-        self.page.update()
+        """Show a snackbar notification with overlay pruning to prevent memory leaks."""
+        if self._page_ref and hasattr(self._page_ref, "overlay"):
+            self._page_ref.overlay = [
+                ctrl for ctrl in self._page_ref.overlay if not isinstance(ctrl, ft.SnackBar)
+            ]
+            snackbar = ft.SnackBar(
+                content=ft.Text(message),
+                bgcolor=self.theme.color_scheme.error if error else self.theme.color_scheme.primary,
+                duration=3000
+            )
+            self._page_ref.overlay.append(snackbar)
+            snackbar.open = True
+            self._page_ref.update()
     
     def update_messages(self, messages: list):
-        """Update the message list."""
-        sorted_messages = sorted(messages, key=lambda x: x["timestamp"])
-        
-        if sorted_messages != self.messages:
+        """Update the message list with incremental rendering and bounded buffer."""
+        with self._lock:
+            sorted_messages = sorted(messages, key=lambda x: x["timestamp"])
+            if len(sorted_messages) > MAX_STREAM_MESSAGES:
+                sorted_messages = sorted_messages[-MAX_STREAM_MESSAGES:]
+
+            if sorted_messages == self.messages:
+                return False
+
+            # Fast path: incremental update for live append without active search
+            if (
+                not self.search_query
+                and self.message_container.content == self.message_list
+                and len(sorted_messages) > len(self.messages)
+                and sorted_messages[:len(self.messages)] == self.messages
+            ):
+                new_messages = sorted_messages[len(self.messages):]
+                self.messages = sorted_messages.copy()
+                self.filtered_messages = list(self.messages)
+
+                for msg in new_messages:
+                    self.message_list.controls.append(
+                        MessageCard(msg, self.theme, on_copy=self._copy_to_clipboard)
+                    )
+
+                # Prune oldest controls exceeding bound
+                excess = len(self.message_list.controls) - MAX_STREAM_MESSAGES
+                if excess > 0:
+                    del self.message_list.controls[:excess]
+
+                if self.auto_scroll_enabled and self._page_ref:
+                    self._page_ref.run_task(self._scroll_to_bottom)
+
+                try:
+                    self.update()
+                except (RuntimeError, AssertionError):
+                    pass
+                return True
+
+            # Standard path: full refresh
             self.messages = sorted_messages.copy()
-            self._filter_messages()
-            return True
-        return False
+
+        self._filter_messages()
+        return True
     
     def update_connection_status(self, is_connected: bool):
         """Update the connection status badge."""
@@ -194,7 +274,10 @@ class DevicePanel(ft.Container):
             theme=self.theme
         )
         self.content.controls[0] = self.connection_badge
-        self.update()
+        try:
+            self.update()
+        except (RuntimeError, AssertionError):
+            pass
 
 
 class DevicePanelInfo:
@@ -269,11 +352,11 @@ class StreamPage(ft.Column):
                 alignment=ft.MainAxisAlignment.START,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER
             ),
-            padding=ft.padding.all(16),
+            padding=16,
             bgcolor=ft.Colors.with_opacity(0.03, self.active_theme.color_scheme.on_surface),
-            border=ft.border.all(1, self.active_theme.color_scheme.outline),
+            border=_safe_border_all(1, self.active_theme.color_scheme.outline),
             border_radius=8,
-            margin=ft.margin.only(bottom=16)
+            margin=_safe_margin_only(bottom=16)
         )
         
         # Empty state for no devices
@@ -426,7 +509,7 @@ class StreamPage(ft.Column):
                     vertical_alignment=ft.CrossAxisAlignment.CENTER
                 ),
                 bgcolor=ft.Colors.with_opacity(0.05, self.active_theme.color_scheme.primary),
-                padding=ft.padding.symmetric(horizontal=16, vertical=12),
+                padding=ft.Padding(16, 12, 16, 12),
                 border_radius=ft.border_radius.only(top_left=8, top_right=8)
             )
             
@@ -440,9 +523,9 @@ class StreamPage(ft.Column):
                     spacing=0,
                     tight=True
                 ),
-                border=ft.border.all(1, self.active_theme.color_scheme.outline),
+                border=_safe_border_all(1, self.active_theme.color_scheme.outline),
                 border_radius=8,
-                animate=ft.animation.Animation(300, ft.AnimationCurve.EASE_OUT)
+                animate=_safe_animation(300, getattr(ft, "AnimationCurve", None).EASE_OUT if hasattr(ft, "AnimationCurve") else None)
             )
             
             # Store panel info

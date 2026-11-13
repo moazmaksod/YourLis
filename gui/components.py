@@ -177,21 +177,80 @@ def close_confirm_dialog(page: ft.Page):
         await close_app(page)
 
     def no_click(e):
-        confirm_dialog.open = False  # Close the dialog
-        page.update()  # Update the page to reflect changes
+        dismiss_dialog(page, confirm_dialog)
 
     # Confirmation dialog
+    primary_btn_cls = getattr(ft, "FilledButton", getattr(ft, "ElevatedButton", ft.Button))
+    outlined_btn_cls = getattr(ft, "OutlinedButton", ft.Button)
+
     confirm_dialog = ft.AlertDialog(
         title=ft.Text("Please confirm"),
         content=ft.Text("Do you really want to exit this app?"),
         actions=[
-            ft.ElevatedButton("Yes", on_click=yes_click),
-            ft.OutlinedButton("No", on_click=no_click),
+            primary_btn_cls("Yes", on_click=yes_click),
+            outlined_btn_cls("No", on_click=no_click),
         ],
         actions_alignment=ft.MainAxisAlignment.END,
     )
 
     return confirm_dialog
+
+
+def db_conn_fail_dialog(page: ft.Page, on_settings=None):
+    """
+    Return an alert dialog for database connection failure with options to configure settings or exit.
+    """
+    async def exit_click(e):
+        await close_app(page)
+
+    def settings_click(e):
+        dismiss_dialog(page, conn_dialog)
+        if on_settings:
+            on_settings()
+
+    primary_btn_cls = getattr(ft, "FilledButton", getattr(ft, "ElevatedButton", ft.Button))
+    outlined_btn_cls = getattr(ft, "OutlinedButton", ft.Button)
+
+    conn_dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Database Connection Failed"),
+        content=ft.Text(
+            "Could not connect to the database. Please check your database credentials or server configuration."
+        ),
+        actions=[
+            primary_btn_cls("Open Settings", on_click=settings_click),
+            outlined_btn_cls("Exit", on_click=exit_click),
+        ],
+        actions_alignment=ft.MainAxisAlignment.END,
+    )
+    return conn_dialog
+
+
+def show_dialog(page: ft.Page, dialog: ft.AlertDialog):
+    """Safely opens a modal or alert dialog across all Flet versions without leaving orphaned modal barriers."""
+    if hasattr(page, "open"):
+        page.open(dialog)
+    else:
+        if dialog not in page.overlay:
+            page.overlay.append(dialog)
+        dialog.open = True
+        page.update()
+
+
+def dismiss_dialog(page: ft.Page, dialog: ft.AlertDialog):
+    """Safely closes an alert dialog across all Flet versions without tearing down the widget tree during transition."""
+    dialog.open = False
+    if hasattr(page, "close") and callable(getattr(page, "close")):
+        try:
+            page.close(dialog)
+        except Exception:
+            pass
+    if hasattr(page, "update") and callable(getattr(page, "update")):
+        try:
+            page.update()
+        except Exception:
+            pass
+
 
 
 

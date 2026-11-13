@@ -5,6 +5,34 @@ from hl7msghandel.hl7dictionary import CBC_RESULT_HL7, HGB_RESULT_HL7
 from log.logger import log_error
 
 
+def _safe_border_all(width: float, color: str):
+    """Safely construct a border across Flet versions."""
+    if hasattr(ft, "Border") and hasattr(ft.Border, "all"):
+        return ft.Border.all(width, color)
+    if hasattr(ft, "border") and hasattr(ft.border, "all"):
+        return ft.border.all(width, color)
+    return None
+
+
+def _safe_animation(duration: int, curve=None):
+    """Safely construct an Animation across Flet versions."""
+    anim_cls = getattr(ft, "Animation", getattr(ft, "animation", None))
+    if hasattr(anim_cls, "Animation"):
+        anim_cls = anim_cls.Animation
+    if anim_cls:
+        return anim_cls(duration, curve) if curve else anim_cls(duration)
+    return duration
+
+
+def _safe_margin_only(left=0, top=0, right=0, bottom=0):
+    """Safely construct margin across Flet versions."""
+    if hasattr(ft, "Margin"):
+        return ft.Margin(left=left, top=top, right=right, bottom=bottom)
+    if hasattr(ft, "margin") and hasattr(ft.margin, "only"):
+        return ft.margin.only(left=left, top=top, right=right, bottom=bottom)
+    return None
+
+
 class MessageDataExtractor:
     """Extract human-readable data from HL7 messages using project's parser."""
     
@@ -47,7 +75,7 @@ class MessageDataExtractor:
     }
     
     @staticmethod
-    def extract_display_data(raw_message: str) -> dict:
+    def extract_display_data(raw_message) -> dict:
         """
         Parse HL7 message and extract data for display.
         
@@ -55,8 +83,13 @@ class MessageDataExtractor:
             dict with keys: message_type, patient_id, patient_name, test_results
         """
         try:
+            if isinstance(raw_message, bytes):
+                raw_message_str = raw_message.decode('utf-8', errors='replace')
+            else:
+                raw_message_str = str(raw_message) if raw_message is not None else ""
+
             # Parse using project's HL7 parser
-            hl7_msg = parse_hl7_message(raw_message, "Display")
+            hl7_msg = parse_hl7_message(raw_message_str, "Display")
             
             if not hl7_msg:
                 return {
@@ -97,8 +130,12 @@ class MessageDataExtractor:
         """Extract message type from MSH segment."""
         try:
             msh = hl7_msg.segment('MSH')
-            if msh and len(msh) >= 9:
-                return str(msh[8])
+            if msh:
+                # In python-hl7, msh[9] is MSH-9 (Message Type); fallback to index 8 if needed
+                if len(msh) > 9 and str(msh[9]).strip():
+                    return str(msh[9]).strip()
+                elif len(msh) > 8 and str(msh[8]).strip():
+                    return str(msh[8]).strip()
             return 'Unknown'
         except Exception:
             return 'Unknown'
@@ -107,7 +144,10 @@ class MessageDataExtractor:
     def _extract_patient_id(hl7_msg) -> str:
         """Extract patient ID from PID segment."""
         try:
-            pid_segments = hl7_msg.segments('PID')
+            try:
+                pid_segments = hl7_msg.segments('PID')
+            except KeyError:
+                return None
             if pid_segments and len(pid_segments) > 0:
                 pid = pid_segments[0]
                 if len(pid) >= 4:
@@ -120,7 +160,10 @@ class MessageDataExtractor:
     def _extract_patient_name(hl7_msg) -> str:
         """Extract patient name from PID segment."""
         try:
-            pid_segments = hl7_msg.segments('PID')
+            try:
+                pid_segments = hl7_msg.segments('PID')
+            except KeyError:
+                return None
             if pid_segments and len(pid_segments) > 0:
                 pid = pid_segments[0]
                 if len(pid) >= 6:
@@ -136,7 +179,10 @@ class MessageDataExtractor:
         """Extract CBC test results using CBC_RESULT_HL7 dictionary."""
         results = []
         try:
-            obx_segments = hl7_msg.segments('OBX')
+            try:
+                obx_segments = hl7_msg.segments('OBX')
+            except KeyError:
+                return results
             if not obx_segments:
                 return results
             
@@ -195,7 +241,10 @@ class MessageDataExtractor:
         """Extract HGB test results using HGB_RESULT_HL7 dictionary."""
         results = []
         try:
-            obx_segments = hl7_msg.segments('OBX')
+            try:
+                obx_segments = hl7_msg.segments('OBX')
+            except KeyError:
+                return results
             if not obx_segments:
                 return results
             
@@ -251,6 +300,14 @@ class MessageDataExtractor:
         
         return results
 
+    @classmethod
+    def parse_hl7(cls, raw_message) -> dict:
+        """Alias for extract_display_data for backward compatibility."""
+        return cls.extract_display_data(raw_message)
+
+
+# Backward-compatibility alias
+HL7MessageParser = MessageDataExtractor
 
 
 class MessageCard(ft.Container):
@@ -431,7 +488,7 @@ class MessageCard(ft.Container):
                     on_click=self._toggle_raw_view,
                     style=ft.ButtonStyle(
                         color=self.theme.color_scheme.primary,
-                        padding=ft.padding.symmetric(horizontal=8, vertical=4)
+                        padding=ft.Padding(8, 4, 8, 4)
                     )
                 )
             ],
@@ -447,10 +504,10 @@ class MessageCard(ft.Container):
                 tight=True
             ),
             bgcolor=self.bg_color,
-            border=ft.border.all(1, ft.Colors.with_opacity(0.1, self.icon_color)),
+            border=_safe_border_all(1, ft.Colors.with_opacity(0.1, self.icon_color)),
             border_radius=12,
             padding=16,
-            animate=ft.animation.Animation(200, ft.AnimationCurve.EASE_OUT),
+            animate=_safe_animation(200, getattr(ft, "AnimationCurve", None).EASE_OUT if hasattr(ft, "AnimationCurve") else None),
         )
         
         # Hover effect
@@ -530,9 +587,9 @@ class MessageCard(ft.Container):
                         )
                     ], spacing=0),
                     bgcolor=ft.Colors.with_opacity(0.03, self.theme.color_scheme.on_surface),
-                    padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                    padding=ft.Padding(8, 4, 8, 4),
                     border_radius=4,
-                    margin=ft.margin.only(bottom=2)
+                    margin=_safe_margin_only(bottom=2)
                 )
             )
         
@@ -565,7 +622,7 @@ class MessageCard(ft.Container):
                 spacing=0,
                 height=400,
             ),
-            border=ft.border.all(1, self.theme.color_scheme.outline),
+            border=_safe_border_all(1, self.theme.color_scheme.outline),
             border_radius=8,
             padding=8,
             bgcolor=ft.Colors.with_opacity(0.02, self.theme.color_scheme.on_surface)
@@ -599,10 +656,11 @@ class MessageCard(ft.Container):
             )
         )
         
+        from gui.components import show_dialog, dismiss_dialog
+
         # Close button
         def close_dialog(e):
-            dialog.open = False
-            page.update()
+            dismiss_dialog(page, dialog)
         
         close_btn = ft.TextButton(
             "Close",
@@ -631,9 +689,7 @@ class MessageCard(ft.Container):
         )
         
         # Show dialog
-        page.overlay.append(dialog)
-        dialog.open = True
-        page.update()
+        show_dialog(page, dialog)
 
 
 
@@ -681,7 +737,7 @@ class MessageTimestamp(ft.Container):
             ],
             spacing=4
         )
-        self.padding = ft.padding.symmetric(vertical=8)
+        self.padding = ft.Padding(0, 8, 0, 8)
 
 
 class DeviceConnectionBadge(ft.Container):
@@ -705,7 +761,7 @@ class DeviceConnectionBadge(ft.Container):
                     height=8,
                     border_radius=4,
                     bgcolor=status_color,
-                    animate=ft.animation.Animation(300, ft.AnimationCurve.EASE_IN_OUT)
+                    animate=_safe_animation(300, getattr(ft, "AnimationCurve", None).EASE_IN_OUT if hasattr(ft, "AnimationCurve") else None)
                 ),
                 ft.Column(
                     controls=[
@@ -728,6 +784,6 @@ class DeviceConnectionBadge(ft.Container):
             spacing=8,
             alignment=ft.MainAxisAlignment.START
         )
-        self.padding = ft.padding.all(12)
+        self.padding = 12
         self.border_radius = 8
         self.bgcolor = ft.Colors.with_opacity(0.05, theme.color_scheme.on_surface)

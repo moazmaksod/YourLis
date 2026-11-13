@@ -24,52 +24,81 @@ def generate_dynamic_port(api_ip):
 
 def run_fastapi(api_ip, port):
     """
-    Start the FastAPI server on the given IP and port.
+    Start the FastAPI server on the given IP and port, with retry on port bind collision.
     """
     import uvicorn
     from api.app import app
 
-    uvicorn.run(app, host=api_ip, port=port, log_config=None)
+    for attempt in range(5):
+        try:
+            uvicorn.run(app, host=api_ip, port=port, log_config=None)
+            break
+        except OSError as e:
+            if attempt < 4:
+                time.sleep(0.5)
+                port = generate_dynamic_port(api_ip)
+                save_config({"API_PORT": port})
+            else:
+                raise
+
+
+def _safe_close_page(page: ft.Page):
+    """Safely closes the window across Flet 0.x and 1.x versions."""
+    try:
+        if hasattr(page, "window") and hasattr(page.window, "close"):
+            page.window.close()
+        elif hasattr(page, "window_close"):
+            page.window_close()
+    except Exception as ex:
+        log_error(f"Error closing configuration window: {ex}")
+
+
+def _run_flet_app(target_func, assets_dir=None):
+    """Launches a Flet application supporting both Flet 0.x (ft.app) and Flet 1.x (ft.run)."""
+    if hasattr(ft, "app"):
+        if assets_dir:
+            ft.app(target=target_func, assets_dir=assets_dir)
+        else:
+            ft.app(target=target_func)
+    elif hasattr(ft, "run"):
+        if assets_dir:
+            ft.run(target_func, assets_dir=assets_dir)
+        else:
+            ft.run(target_func)
+    else:
+        raise AttributeError("Neither ft.app nor ft.run is available in installed flet module.")
 
 
 def run_flet():
     """
     Start the Flet GUI application.
     """
-    ft.app(target=flet_main, assets_dir="assets")
+    _run_flet_app(flet_main, assets_dir="assets")
 
 
-def wait_for_fastapi_server(api_ip, port, timeout=15, interval=0.5):
+def wait_for_fastapi_server(api_ip, initial_port=None, timeout=15, interval=0.5):
     """
-    Wait until the FastAPI server is available at /server/status.
+    Wait until the FastAPI server is available at /server/status, dynamically reading the port from config.
     Returns True if available, False if timeout is reached.
     """
-    status_url = f"http://{api_ip}:{port}/server/status"
-    log_info(f"Waiting for FastAPI server at {status_url} to become available...")
     start_time = time.time()
     while time.time() - start_time < timeout:
+        current_cfg = get_config()
+        current_port = current_cfg.get("API_PORT", initial_port)
+        current_ip = current_cfg.get("API_IP", api_ip)
+        status_url = f"http://{current_ip}:{current_port}/server/status"
         try:
-            resp = httpx.get(status_url)
+            resp = httpx.get(status_url, timeout=2.0)
             if resp.status_code == 200:
                 log_info(f"FastAPI server is available at {status_url}.")
                 return True
         except Exception as e:
-            log_info(f"FastAPI server not available yet: {e}")
+            log_info(f"FastAPI server not available at {status_url} yet: {e}")
         time.sleep(interval)
     log_error(
-        f"FastAPI server did not become available at {status_url} within {timeout} seconds."
+        f"FastAPI server did not become available at {api_ip} within {timeout} seconds."
     )
     return False
-
-
-def patch_api_methods_base_url(api_ip, port):
-    """
-    Patch gui.api_methods.api_base_url to use the correct dynamic port.
-    """
-    import gui.api_methods as api_methods
-
-    api_methods.api_base_url = f"http://{api_ip}:{port}"
-    return api_methods.start_server
 
 
 def database_startup_check():
@@ -93,8 +122,12 @@ def show_db_config_window():
 
     def config_app(page: ft.Page):
         page.title = "Database Configuration"
-        page.window_width = 500
-        page.window_height = 650
+        if hasattr(page, "window"):
+            page.window.width = 500
+            page.window.height = 650
+        else:
+            page.window_width = 500
+            page.window_height = 650
         page.vertical_alignment = ft.MainAxisAlignment.CENTER
         page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
         page.theme_mode = ft.ThemeMode.DARK
@@ -106,7 +139,7 @@ def show_db_config_window():
         port_input = ft.TextField(label="Database Port", value=str(cfg.get("DB_PORT", "")), width=400)
         name_input = ft.TextField(label="Database Name", value=cfg.get("DB_NAME", ""), width=400)
         user_input = ft.TextField(label="Database User", value=cfg.get("DB_USER", ""), width=400)
-        pass_input = ft.TextField(label="Database Password", value=cfg.get("DB_PASSWORD", ""), password=True, can_reveal_password=True, width=400)
+        pass_input = ft.TextField(label="Database Password", value=cfg.get("DB_PASSWORD", ""), password=True, can_reveal_password=False, width=400)
         
         drivers = get_available_sql_drivers()
         driver_dropdown = ft.Dropdown(
@@ -136,7 +169,7 @@ def show_db_config_window():
                 }
                 save_config(new_cfg)
                 result["action"] = "retry"
-                page.window_close()
+                _safe_close_page(page)
             except Exception as ex:
                 page.snack_bar = ft.SnackBar(ft.Text(f"Error saving: {ex}"))
                 page.snack_bar.open = True
@@ -144,13 +177,13 @@ def show_db_config_window():
 
         def cancel_click(e):
             result["action"] = "exit"
-            page.window_close()
+            _safe_close_page(page)
 
         page.add(
             ft.Container(
                 content=ft.Column(
                     [
-                        ft.Icon(ft.icons.STORAGE, size=50, color=ft.colors.AMBER),
+                        ft.Icon(ft.Icons.STORAGE, size=50, color=ft.Colors.AMBER),
                         ft.Text("Database Connection Failed", size=24, weight=ft.FontWeight.BOLD),
                         ft.Text("Please verify and update your connection settings:", size=14),
                         host_input,
@@ -162,7 +195,7 @@ def show_db_config_window():
                         type_dropdown,
                         ft.Row(
                             [
-                                ft.ElevatedButton("Save & Retry", on_click=save_click, icon=ft.icons.SAVE),
+                                ft.ElevatedButton("Save & Retry", on_click=save_click, icon=ft.Icons.SAVE),
                                 ft.TextButton("Cancel / Exit", on_click=cancel_click),
                             ],
                             alignment=ft.MainAxisAlignment.CENTER,
@@ -177,7 +210,11 @@ def show_db_config_window():
         )
         page.update()
 
-    ft.app(target=config_app)
+    try:
+        _run_flet_app(config_app)
+    except Exception as e:
+        log_error(f"Failed to show database configuration window: {e}")
+        return "exit"
     return result["action"]
 
 
@@ -189,8 +226,12 @@ def show_network_config_window(failed_ip=None):
 
     def config_app(page: ft.Page):
         page.title = "Network Configuration"
-        page.window_width = 500
-        page.window_height = 450
+        if hasattr(page, "window"):
+            page.window.width = 500
+            page.window.height = 450
+        else:
+            page.window_width = 500
+            page.window_height = 450
         page.vertical_alignment = ft.MainAxisAlignment.CENTER
         page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
         page.theme_mode = ft.ThemeMode.DARK
@@ -208,9 +249,9 @@ def show_network_config_window(failed_ip=None):
         if "127.0.0.1" not in local_ips:
             local_ips.insert(0, "127.0.0.1")
             
-        ip_suggestions = ft.Text(f"Available Local IPs: {', '.join(local_ips)}", size=12, color=ft.colors.GREY_400)
+        ip_suggestions = ft.Text(f"Available Local IPs: {', '.join(local_ips)}", size=12, color=ft.Colors.GREY_400)
 
-        error_msg = ft.Text(f"Failed to bind to: {failed_ip}" if failed_ip else "", color=ft.colors.RED, size=14)
+        error_msg = ft.Text(f"Failed to bind to: {failed_ip}" if failed_ip else "", color=ft.Colors.RED, size=14)
 
         def save_click(e):
             try:
@@ -227,7 +268,7 @@ def show_network_config_window(failed_ip=None):
                 }
                 save_config(new_cfg)
                 result["action"] = "retry"
-                page.window_close()
+                _safe_close_page(page)
             except Exception as ex:
                 page.snack_bar = ft.SnackBar(ft.Text(f"Error saving: {ex}"))
                 page.snack_bar.open = True
@@ -235,13 +276,13 @@ def show_network_config_window(failed_ip=None):
 
         def cancel_click(e):
             result["action"] = "exit"
-            page.window_close()
+            _safe_close_page(page)
 
         page.add(
             ft.Container(
                 content=ft.Column(
                     [
-                        ft.Icon(ft.icons.WIFI_OFF, size=50, color=ft.colors.RED),
+                        ft.Icon(ft.Icons.WIFI_OFF, size=50, color=ft.Colors.RED),
                         ft.Text("Network Configuration Error", size=24, weight=ft.FontWeight.BOLD),
                         ft.Text("The server cannot start with current IP settings.", size=14),
                         error_msg,
@@ -250,7 +291,7 @@ def show_network_config_window(failed_ip=None):
                         server_host_input,
                         ft.Row(
                             [
-                                ft.ElevatedButton("Save & Retry", on_click=save_click, icon=ft.icons.SAVE),
+                                ft.ElevatedButton("Save & Retry", on_click=save_click, icon=ft.Icons.SAVE),
                                 ft.TextButton("Cancel / Exit", on_click=cancel_click),
                             ],
                             alignment=ft.MainAxisAlignment.CENTER,
@@ -264,7 +305,11 @@ def show_network_config_window(failed_ip=None):
         )
         page.update()
 
-    ft.app(target=config_app)
+    try:
+        _run_flet_app(config_app)
+    except Exception as e:
+        log_error(f"Failed to show database configuration window: {e}")
+        return "exit"
     return result["action"]
 
 
@@ -327,21 +372,56 @@ def main():
     port = generate_dynamic_port(api_ip)
     # Save the dynamic port to config for reference BEFORE any API calls
     save_config({"API_PORT": port})
+    import atexit
+    import signal
+    import sys
+
     # Start Flet GUI in a separate process
     flet_process = multiprocessing.Process(target=run_flet)
     flet_process.start()
     # Start FastAPI server in a separate process
     fastapi_process = multiprocessing.Process(target=run_fastapi, args=(api_ip, port))
     fastapi_process.start()
+
+    def terminate_process(proc, name="Process", timeout=3.0):
+        if proc and proc.is_alive():
+            log_info(f"Terminating {name} (PID: {proc.pid})...")
+            try:
+                proc.terminate()
+                proc.join(timeout=timeout)
+                if proc.is_alive():
+                    log_info(f"{name} did not terminate within {timeout}s; sending SIGKILL...")
+                    proc.kill()
+                    proc.join(timeout=1.0)
+            except Exception as ex:
+                log_error(f"Error terminating {name}: {ex}")
+
+    def cleanup_all():
+        terminate_process(fastapi_process, "FastAPI server")
+        terminate_process(flet_process, "Flet GUI")
+
+    atexit.register(cleanup_all)
+
+    def signal_handler(signum, frame):
+        log_info(f"Received exit signal ({signum}). Initiating graceful process cleanup...")
+        cleanup_all()
+        sys.exit(0)
+
+    try:
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+    except (ValueError, AttributeError):
+        pass
+
     # Wait for FastAPI server to be ready, then start CBC server if enabled
     if cfg.get("AUTO_START_CBC_SERVER", True):
-        if wait_for_fastapi_server(api_ip, port):
+        if wait_for_fastapi_server(api_ip, initial_port=port):
             try:
                 log_info(
                     "Attempting to auto start CBC server (calling start_server)..."
                 )
-                cbc_start_server_dynamic = patch_api_methods_base_url(api_ip, port)
-                result = asyncio.run(cbc_start_server_dynamic())
+                from gui.api_methods import start_server as cbc_start_server
+                result = asyncio.run(cbc_start_server())
                 log_info(f"CBC server start_server() result: {result}")
             except Exception as e:
                 log_error(f"Failed to auto start CBC server: {e}")
@@ -353,17 +433,10 @@ def main():
     try:
         flet_process.join()
     except KeyboardInterrupt:
-        log_info("Shutting down...")
-        flet_process.terminate()
-
-    # Terminate FastAPI process on exit
-    log_info("Shutting down FastAPI server...")
-    fastapi_process.terminate()
-    fastapi_process.join(timeout=3.0)
-    if fastapi_process.is_alive():
-        log_info("FastAPI process did not exit gracefully, killing...")
-    
-    log_info("Application shutdown complete.")
+        log_info("KeyboardInterrupt received in main process.")
+    finally:
+        cleanup_all()
+        log_info("Application shutdown complete.")
 
 
 if __name__ == "__main__":

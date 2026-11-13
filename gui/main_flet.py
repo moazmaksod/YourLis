@@ -3,6 +3,8 @@ from gui.components import (
     server_control,
     side_menu,
     close_confirm_dialog,
+    db_conn_fail_dialog,
+    show_dialog,
     title_bar,
     footer,
 )
@@ -92,7 +94,7 @@ def main(page: ft.Page):
     confirm_dialog = close_confirm_dialog(page)
 
     # Show DB connection fail dialog as overlay if DB is not connected at startup
-    from database.sqlconnection import get_db_connection
+    from database.sqlconnection import get_db_connection_context
 
     def show_settings_view():
         # Use the same logic as side menu navigation to settings
@@ -113,19 +115,16 @@ def main(page: ft.Page):
         page.update()
 
     try:
-        get_db_connection()
+        with get_db_connection_context():
+            pass
     except Exception:
         dialog = db_conn_fail_dialog(page, on_settings=show_settings_view)
-        page.overlay.append(dialog)
-        dialog.open = True
-        page.update()
+        show_dialog(page, dialog)
 
     # Handle window close events
     def handle_window_event(e):
         if e.data == "close":
-            confirm_dialog.open = True  # Show the confirmation dialog
-            page.overlay.append(confirm_dialog)
-            page.update()
+            show_dialog(page, confirm_dialog)
 
     # Prevent default close behavior and attach the event handler
     page.window.prevent_close = True

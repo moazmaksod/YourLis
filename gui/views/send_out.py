@@ -3,12 +3,11 @@ import datetime
 import math
 import asyncio
 from log.logger import log_info, log_error
-from database.sqlqueries import exec_procedure_for, exec_procedure_no_return
-from database.sqldbdictionary import (
-    SEND_OUT_SEARCH_SQL,
-    INSERT_SEND_OUT_LOG_SQL,
-    GET_DESTINATION_LABS_SQL,
-    UPDATE_SEND_OUT_FINANCIALS_SQL,
+from gui.api_methods import (
+    fetch_send_out_api,
+    fetch_destination_labs_api,
+    update_send_out_financials_api,
+    mark_send_out_sent_api,
 )
 
 # Date format settings from patient view
@@ -21,20 +20,17 @@ async def fetch_send_out_data(
     patient_id=None, patient_name=None, destination_lab=None, start_date=None, end_date=None, status=None
 ):
     """
-    Placeholder function to fetch send-out sample data.
-    Replace this with your actual database query.
+    Fetches send-out sample data through the API/Service boundary.
     """
     try:
-        params = {
-            "PatientID": patient_id or None,
-            "PatientName": patient_name or None,
-            "DestinationLab": destination_lab or None,
-            "StartDate": start_date or None,
-            "EndDate": end_date or None,
-            "Status": status or None,
-        }
-        # Run blocking DB call in thread
-        return await exec_procedure_for(SEND_OUT_SEARCH_SQL, params) or []
+        return await fetch_send_out_api(
+            patient_id=patient_id,
+            patient_name=patient_name,
+            destination_lab=destination_lab,
+            start_date=start_date,
+            end_date=end_date,
+            status=status,
+        ) or []
     except Exception as e:
         log_error(f"Error fetching send-out data: {e}")
         return []
@@ -42,10 +38,10 @@ async def fetch_send_out_data(
 
 async def fetch_destination_labs():
     """
-    Fetches the list of destination labs.
+    Fetches the list of destination labs through the API/Service boundary.
     """
     try:
-        result = await exec_procedure_for(GET_DESTINATION_LABS_SQL, {})
+        result = await fetch_destination_labs_api()
         log_info(f"Fetched {len(result) if result else 0} destination labs.")
         return result or []
     except Exception as e:
@@ -167,19 +163,16 @@ def create_send_out_row(page, sample):
                 page.update()
                 return
 
-            params = {
-                "PatientID": sample["Patient ID"],
-                "TestName": sample["Test Name"],
-                "Price": new_price,
-                "AmountPaid": new_paid,
-                "DestinationLab": dest_lab_field.value,
-                "EditDate": datetime.datetime.now().strftime("%d-%b-%Y %I:%M %p"),
-                "Status": status_field.value,
-            }
-
             try:
-                # Execute update procedure
-                await exec_procedure_no_return(UPDATE_SEND_OUT_FINANCIALS_SQL, params)
+                # Execute update procedure via API / service boundary
+                await update_send_out_financials_api(
+                    patient_id=sample["Patient ID"],
+                    test_name=sample["Test Name"],
+                    price=new_price,
+                    amount_paid=new_paid,
+                    destination_lab=dest_lab_field.value,
+                    status=status_field.value,
+                )
 
                 # Update UI and local data
                 sample["Price"] = new_price
@@ -218,17 +211,14 @@ def create_send_out_row(page, sample):
             price = float(sample.get("Price") or 0)
             new_paid = price
             
-            params = {
-                "PatientID": sample["Patient ID"],
-                "TestName": sample["Test Name"],
-                "Price": price,
-                "AmountPaid": new_paid,
-                "DestinationLab": sample.get("Destination Lab", ""),
-                "EditDate": datetime.datetime.now().strftime("%d-%b-%Y %I:%M %p"),
-                "Status": "Sent",
-            }
-
-            await exec_procedure_no_return(UPDATE_SEND_OUT_FINANCIALS_SQL, params)
+            await update_send_out_financials_api(
+                patient_id=sample["Patient ID"],
+                test_name=sample["Test Name"],
+                price=price,
+                amount_paid=new_paid,
+                destination_lab=sample.get("Destination Lab", ""),
+                status="Sent",
+            )
 
             # Update local data
             sample["Amount Paid"] = new_paid
@@ -275,14 +265,11 @@ def create_send_out_row(page, sample):
             e.control.disabled = True
             page.update()
 
-            params = {
-                "PatientID": patient_id,
-                "TestName": test_name,
-                "SentDate": datetime.datetime.now(),
-            }
-
-            # Run blocking DB call in thread
-            await exec_procedure_no_return(INSERT_SEND_OUT_LOG_SQL, params)
+            await mark_send_out_sent_api(
+                patient_id=patient_id,
+                test_name=test_name,
+                sent_date=datetime.datetime.now(),
+            )
 
             # Update the UI to reflect the change
             e.control.text = "Sent"

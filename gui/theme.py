@@ -101,6 +101,17 @@ light_text_theme = _create_text_theme(primary_color=ft.Colors.BLACK)
 dark_text_theme = _create_text_theme(primary_color=DarkThemeColors.ON_BACKGROUND)
 dark_text_theme.label_medium.color = DarkThemeColors.ON_SURFACE_VARIANT # Specific override for secondary text
 
+def _build_color_scheme(**kwargs):
+    valid_fields = set(getattr(ft.ColorScheme, '__dataclass_fields__', {}).keys())
+    if valid_fields:
+        filtered = {k: v for k, v in kwargs.items() if k in valid_fields}
+        return ft.ColorScheme(**filtered)
+    try:
+        return ft.ColorScheme(**kwargs)
+    except TypeError:
+        return ft.ColorScheme()
+
+
 # ==============================================================================
 # --- 4. THEME OBJECTS ---
 # ==============================================================================
@@ -108,7 +119,7 @@ dark_text_theme.label_medium.color = DarkThemeColors.ON_SURFACE_VARIANT # Specif
 # --- Light Theme ---
 # Now uses an explicit color_scheme for full compatibility
 light_theme = ft.Theme(
-    color_scheme=ft.ColorScheme(
+    color_scheme=_build_color_scheme(
         primary=LightThemeColors.PRIMARY,
         on_primary=LightThemeColors.ON_PRIMARY,
         background=LightThemeColors.BACKGROUND,
@@ -132,7 +143,7 @@ light_theme = ft.Theme(
 # --- Dark Theme ---
 # Constructed using the explicit color scheme defined in the DarkThemeColors class.
 dark_theme = ft.Theme(
-    color_scheme=ft.ColorScheme(
+    color_scheme=_build_color_scheme(
         primary=DarkThemeColors.PRIMARY,
         on_primary=DarkThemeColors.ON_PRIMARY,
         background=DarkThemeColors.BACKGROUND,

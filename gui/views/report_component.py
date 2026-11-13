@@ -1,4 +1,4 @@
-﻿import flet as ft
+import flet as ft
 import datetime
 from gui.views.cbc_normal_ranges import (
     determine_age_group,
@@ -12,13 +12,22 @@ gui_time_format = "%d-%m-%Y"
 sql_time_format = "%Y-%m-%d"
 
 
+def _safe_border_all(width: float = 1, color=None):
+    """Safely construct a border across Flet versions."""
+    if hasattr(ft, "Border") and hasattr(ft.Border, "all"):
+        return ft.Border.all(width, color) if color else ft.Border.all(width)
+    if hasattr(ft, "border") and hasattr(ft.border, "all"):
+        return ft.border.all(width, color) if color else ft.border.all(width)
+    return None
+
+
 class ReportPatientInfo(ft.Container):
 
     def __init__(self, patient_info: dict):
         super().__init__(
             content=None,
-            padding=ft.padding.all(10),
-            border=ft.border.all(1),
+            padding=10,
+            border=_safe_border_all(1),
             width=794,
         )
         self.patient_info = patient_info
@@ -65,7 +74,7 @@ class ReportPatientResult(ft.Container):
     def __init__(self, patient_result: dict):
         super().__init__(
             padding=10,
-            border=ft.border.all(1),
+            border=_safe_border_all(1),
             width=794,
             expand=True,
         )

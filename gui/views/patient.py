@@ -1,9 +1,16 @@
 import flet as ft
-from database.sqlqueries import exec_procedure_for
-from database.sqldbdictionary import PATIENT_SEARCH_SQL
+from gui.api_methods import fetch_patients_api
 from gui.views.cbc_report import cbc_report_view
 from log.logger import log_info, log_error
 import datetime
+
+def ButtonClass(text=None, on_click=None, **kwargs):
+    btn_cls = getattr(ft, "FilledButton", getattr(ft, "ElevatedButton", ft.Button))
+    text_val = text if text is not None else kwargs.pop("text", "")
+    try:
+        return btn_cls(text_val, on_click=on_click, **kwargs)
+    except TypeError:
+        return btn_cls(content=text_val, on_click=on_click, **kwargs)
 
 # Date format settings
 gui_time_format = "%d-%m-%Y"
@@ -76,18 +83,16 @@ async def fetch_patient_data(
     result_finished=None,
 ):
     """
-    Fetches patient data based on the provided filters.
+    Fetches patient data through the API/Service boundary.
     """
     try:
-        params = {
-            "PATIENT_ID": patient_id or None,
-            "PATIENT_NAME": patient_name or None,
-            "START_DATE": start_date or None,
-            "END_DATE": end_date or None,
-            "RESULT_FINISHED": result_finished,
-        }
-        # Run the blocking DB call in a thread to avoid freezing the GUI
-        return await asyncio.to_thread(exec_procedure_for, PATIENT_SEARCH_SQL, params) or []
+        return await fetch_patients_api(
+            patient_id=patient_id,
+            patient_name=patient_name,
+            start_date=start_date,
+            end_date=end_date,
+            result_finished=result_finished,
+        ) or []
     except Exception as e:
         log_error(f"Error fetching patient data: {e}")
         return []
@@ -95,11 +100,26 @@ async def fetch_patient_data(
 
 def create_patient_row(page, patient):
     """
-    Creates a DataRow for the patient table.
+    Creates a DataRow for the patient table safely handling both datetime objects and JSON strings.
     """
-    requested_date = patient.get("Requested Date", "")
-    requested_date = requested_date.strftime(gui_time_format)
-    age = str(int(patient["Age"])) if patient["Age"] else ""
+    requested_date_raw = patient.get("Requested Date")
+    if hasattr(requested_date_raw, "strftime"):
+        requested_date = requested_date_raw.strftime(gui_time_format)
+    elif isinstance(requested_date_raw, str) and requested_date_raw.strip():
+        try:
+            # Handle ISO string e.g. '2026-11-13T10:00:00'
+            dt = datetime.datetime.fromisoformat(requested_date_raw.strip().replace("Z", ""))
+            requested_date = dt.strftime(gui_time_format)
+        except Exception:
+            requested_date = requested_date_raw[:10]
+    else:
+        requested_date = ""
+
+    age_raw = patient.get("Age")
+    try:
+        age = str(int(float(age_raw))) if age_raw is not None and str(age_raw).strip() != "" else ""
+    except (ValueError, TypeError):
+        age = str(age_raw or "")
 
     async def view_results_click(e):
         await on_view_results_click(page, patient["Patient ID"])
@@ -115,7 +135,7 @@ def create_patient_row(page, patient):
             ft.DataCell(ft.Text(patient["Requested Test"])),
             ft.DataCell(ft.Text(patient["Result State"])),
             ft.DataCell(
-                ft.ElevatedButton(
+                ButtonClass(
                     text="View Result",
                     on_click=view_results_click,
                 )
@@ -225,7 +245,7 @@ def patient_view(page: ft.Page):
             current_date=datetime.date.today(),
             on_change=lambda e: on_date_change(e, date_field),
         )
-        return ft.ElevatedButton(
+        return ButtonClass(
             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
             height=50,
             text=label,
@@ -308,13 +328,13 @@ def patient_view(page: ft.Page):
             await patient_table.load_page(current_page)
             await update_pagination_display(current_page)
 
-    prev_button = ft.ElevatedButton(
+    prev_button = ButtonClass(
         "← Previous",
         on_click=prev_page,
         height=50,
         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
     )
-    next_button = ft.ElevatedButton(
+    next_button = ButtonClass(
         "Next →",
         on_click=next_page,
         height=50,
@@ -357,7 +377,7 @@ def patient_view(page: ft.Page):
 
         page.run_task(do_search)
 
-    search_button = ft.ElevatedButton(
+    search_button = ButtonClass(
         text="Search",
         on_click=search_handler,
         height=50,

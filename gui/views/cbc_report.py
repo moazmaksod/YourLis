@@ -1,6 +1,6 @@
-from database.sqlqueries import exec_procedure_for
-from database.sqldbdictionary import PATIENT_CBC_RESULT_SQL
+from gui.api_methods import fetch_patient_cbc_api
 from gui.views.report_component import ReportPatientInfo, ReportPatientResult
+from gui.components import show_dialog, dismiss_dialog
 from log.logger import log_info, log_error
 import flet as ft
 import os
@@ -9,14 +9,10 @@ import subprocess
 
 async def fetch_patient_cbc_result(patient_id=None):
     """
-    Fetches patient data based on the provided filters.
+    Fetches patient CBC result through the API/Service boundary.
     """
     try:
-        params = {
-            "PATIENT_ID": patient_id or None,
-        }
-
-        return await exec_procedure_for(PATIENT_CBC_RESULT_SQL, params) or []
+        return await fetch_patient_cbc_api(patient_id) or []
     except Exception as e:
         log_error(f"Error fetching patient cbc result: {e}")
         return []
@@ -51,17 +47,19 @@ async def cbc_report_view(page: ft.Page, patient_id):
     # Ensure result_data is not empty before proceeding
     if not result_data:
         snack = ft.SnackBar(ft.Text("No result found for this patient ID."))
-        page.overlay.append(snack)
-        snack.open = True
-        page.update()
+        if hasattr(page, "open"):
+            page.open(snack)
+        else:
+            page.overlay.append(snack)
+            snack.open = True
+            page.update()
         return
 
     result_data = result_data[0]  # Assuming we always take the first result
 
     def close_report_view(e):
         if report_view:  # Check if report_view is defined
-            report_view.open = False
-            page.update()  # Update the page to reflect changes
+            dismiss_dialog(page, report_view)
 
     async def save_report_as_html(e):
         try:
@@ -504,18 +502,24 @@ async def cbc_report_view(page: ft.Page, patient_id):
             log_info(f"HTML report written to: {html_path}")
 
             snack = ft.SnackBar(ft.Text(f"HTML saved: {html_path}"))
-            page.overlay.append(snack)
-            snack.open = True
-            page.update()
+            if hasattr(page, "open"):
+                page.open(snack)
+            else:
+                page.overlay.append(snack)
+                snack.open = True
+                page.update()
         except Exception as ex:
             log_error(f"Failed to save HTML: {ex}")
             import traceback
 
             log_error(traceback.format_exc())
             snack = ft.SnackBar(ft.Text(f"Failed to save HTML: {ex}"))
-            page.overlay.append(snack)
-            snack.open = True
-            page.update()
+            if hasattr(page, "open"):
+                page.open(snack)
+            else:
+                page.overlay.append(snack)
+                snack.open = True
+                page.update()
 
     # Define report_view outside the if block to ensure it's always defined
     # or handle the case where result_data is empty
@@ -534,18 +538,18 @@ async def cbc_report_view(page: ft.Page, patient_id):
     )
 
     if result_data:
-        page.overlay.append(report_view)
-        report_view.open = True
+        show_dialog(page, report_view)
     else:
         # If no result data, show a different dialog or message
+        def close_no_result(e):
+            dismiss_dialog(page, no_result_dialog)
+
+        ButtonClass = getattr(ft, "FilledButton", getattr(ft, "ElevatedButton", ft.Button))
         no_result_dialog = ft.AlertDialog(
             title=ft.Text("No Result Found"),
             actions=[
-                ft.ElevatedButton("Close", on_click=close_report_view),
+                ButtonClass("Close", on_click=close_no_result),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
-        page.overlay.append(no_result_dialog)
-        no_result_dialog.open = True
-
-    page.update()
+        show_dialog(page, no_result_dialog)

@@ -1,17 +1,48 @@
 import flet as ft
 import csv
+import threading
 from datetime import datetime
 from pathlib import Path
 import os
 
 
+def _safe_border_all(width: float, color: str):
+    """Safely construct a border across Flet versions."""
+    if hasattr(ft, "Border") and hasattr(ft.Border, "all"):
+        return ft.Border.all(width, color)
+    if hasattr(ft, "border") and hasattr(ft.border, "all"):
+        return ft.border.all(width, color)
+    return None
+
+
+def _safe_margin_only(left=0, top=0, right=0, bottom=0):
+    """Safely construct margin across Flet versions."""
+    if hasattr(ft, "Margin"):
+        return ft.Margin(left=left, top=top, right=right, bottom=bottom)
+    if hasattr(ft, "margin") and hasattr(ft.margin, "only"):
+        return ft.margin.only(left=left, top=top, right=right, bottom=bottom)
+    return None
+
+
+def _safe_animation(duration: int, curve=None):
+    """Safely construct an Animation across Flet versions."""
+    anim_cls = getattr(ft, "Animation", getattr(ft, "animation", None))
+    if hasattr(anim_cls, "Animation"):
+        anim_cls = anim_cls.Animation
+    if anim_cls:
+        return anim_cls(duration, curve) if curve else anim_cls(duration)
+    return duration
+
+
 class SearchBar(ft.Container):
-    """Search bar for filtering messages."""
+    """Search bar for filtering messages with debounced input."""
     
-    def __init__(self, theme: ft.Theme, on_search_change=None):
+    def __init__(self, theme: ft.Theme, on_search_change=None, debounce_ms: int = 300):
         super().__init__()
         self.theme = theme
         self.on_search_change_callback = on_search_change
+        self.debounce_ms = debounce_ms
+        self._debounce_timer = None
         
         self.search_field = ft.TextField(
             hint_text="Search messages...",
@@ -20,9 +51,9 @@ class SearchBar(ft.Container):
             filled=True,
             dense=True,
             on_change=self._on_search_change,
-            on_submit=self._on_search_change,
+            on_submit=self._on_search_submit,
             text_size=14,
-            content_padding=ft.padding.symmetric(horizontal=12, vertical=8),
+            content_padding=ft.Padding(12, 8, 12, 8),
         )
         
         self.clear_button = ft.IconButton(
@@ -51,19 +82,43 @@ class SearchBar(ft.Container):
         self.expand = True
     
     def _on_search_change(self, e):
-        """Handle search text change."""
+        """Handle search text change with debounce."""
         query = self.search_field.value.strip()
         self.clear_button.visible = bool(query)
-        self.update()
-        
+        try:
+            self.update()
+        except (RuntimeError, AssertionError):
+            pass
+
+        if self._debounce_timer is not None:
+            self._debounce_timer.cancel()
+
+        def trigger():
+            if self.on_search_change_callback:
+                self.on_search_change_callback(query)
+
+        self._debounce_timer = threading.Timer(self.debounce_ms / 1000.0, trigger)
+        self._debounce_timer.daemon = True
+        self._debounce_timer.start()
+
+    def _on_search_submit(self, e):
+        """Handle search submission immediately without debounce wait."""
+        if self._debounce_timer is not None:
+            self._debounce_timer.cancel()
+        query = self.search_field.value.strip()
         if self.on_search_change_callback:
             self.on_search_change_callback(query)
     
     def _on_clear(self, e):
-        """Clear the search field."""
+        """Clear the search field immediately."""
+        if self._debounce_timer is not None:
+            self._debounce_timer.cancel()
         self.search_field.value = ""
         self.clear_button.visible = False
-        self.update()
+        try:
+            self.update()
+        except (RuntimeError, AssertionError):
+            pass
         
         if self.on_search_change_callback:
             self.on_search_change_callback("")
@@ -142,27 +197,34 @@ class ExportButton(ft.Container):
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             
+            from gui.views.message_components import MessageDataExtractor
+
             for msg in messages:
+                raw_msg = msg.get('message', '')
+                if isinstance(raw_msg, bytes):
+                    raw_msg_str = raw_msg.decode('utf-8', errors='replace')
+                else:
+                    raw_msg_str = str(raw_msg) if raw_msg is not None else ""
+
                 # Parse HL7 for structured data
-                from gui.views.message_components import HL7MessageParser
-                parsed = HL7MessageParser.parse_hl7(msg['message'])
+                parsed = MessageDataExtractor.extract_display_data(raw_msg_str)
                 
                 # Format test results
                 test_results = '; '.join([
-                    f"{t.get('name', 'Unknown')}: {t.get('value', '')} {t.get('unit', '')}".strip()
-                    for t in parsed['test_results']
+                    f"{t.get('label') or t.get('name') or t.get('key', 'Unknown')}: {t.get('value', '')} {t.get('unit', '')}".strip()
+                    for t in parsed.get('test_results', [])
                 ])
                 
                 writer.writerow({
-                    'Timestamp': msg['timestamp'],
-                    'Direction': msg['direction'],
-                    'Client Name': msg['client_name'],
-                    'Client Address': msg['client_address'],
-                    'Message Type': parsed['message_type'],
-                    'Patient ID': parsed['patient_id'] or '',
-                    'Patient Name': parsed['patient_name'] or '',
+                    'Timestamp': msg.get('timestamp', ''),
+                    'Direction': msg.get('direction', ''),
+                    'Client Name': msg.get('client_name', ''),
+                    'Client Address': msg.get('client_address', ''),
+                    'Message Type': parsed.get('message_type', ''),
+                    'Patient ID': parsed.get('patient_id') or '',
+                    'Patient Name': parsed.get('patient_name') or '',
                     'Test Results': test_results,
-                    'Raw Message': msg['message'].replace('\n', ' | ')
+                    'Raw Message': raw_msg_str.replace('\r', '').replace('\n', ' | ')
                 })
         
         return str(filepath)
@@ -181,7 +243,7 @@ class StreamToolbar(ft.Container):
         on_clear_messages=None
     ):
         super().__init__()
-        self.page = page
+        self._page_ref = page
         self.theme = theme
         self.on_search_change_callback = on_search_change
         self.on_export_callback = on_export
@@ -240,11 +302,11 @@ class StreamToolbar(ft.Container):
                 vertical_alignment=ft.CrossAxisAlignment.CENTER
             ),
             bgcolor=ft.Colors.with_opacity(0.03, theme.color_scheme.on_surface),
-            border=ft.border.all(1, theme.color_scheme.outline),
+            border=_safe_border_all(1, theme.color_scheme.outline),
             border_radius=8,
-            padding=ft.padding.symmetric(horizontal=12, vertical=8),
+            padding=ft.Padding(12, 8, 12, 8),
         )
-        self.margin = ft.margin.only(bottom=12)
+        self.margin = _safe_margin_only(bottom=12)
     
     def _toggle_auto_scroll(self, e):
         """Toggle auto-scroll functionality."""
@@ -260,7 +322,10 @@ class StreamToolbar(ft.Container):
             self.auto_scroll_button.icon_color = self.theme.color_scheme.on_surface_variant
             self.auto_scroll_button.tooltip = "Auto-scroll: OFF"
         
-        self.update()
+        try:
+            self.update()
+        except (RuntimeError, AssertionError):
+            pass
         
         if self.on_auto_scroll_toggle_callback:
             self.on_auto_scroll_toggle_callback(self.auto_scroll_enabled)
@@ -271,11 +336,17 @@ class StreamToolbar(ft.Container):
             # Show confirmation dialog
             def close_dialog(e):
                 dialog.open = False
-                self.page.update()
+                if self._page_ref and dialog in self._page_ref.overlay:
+                    self._page_ref.overlay.remove(dialog)
+                if self._page_ref:
+                    self._page_ref.update()
             
             def confirm_clear(e):
                 dialog.open = False
-                self.page.update()
+                if self._page_ref and dialog in self._page_ref.overlay:
+                    self._page_ref.overlay.remove(dialog)
+                if self._page_ref:
+                    self._page_ref.update()
                 self.on_clear_messages_callback()
             
             dialog = ft.AlertDialog(
@@ -295,9 +366,10 @@ class StreamToolbar(ft.Container):
                 actions_alignment=ft.MainAxisAlignment.END,
             )
             
-            self.page.overlay.append(dialog)
-            dialog.open = True
-            self.page.update()
+            if self._page_ref:
+                self._page_ref.overlay.append(dialog)
+                dialog.open = True
+                self._page_ref.update()
     
     def get_search_query(self) -> str:
         """Get current search query."""
@@ -331,18 +403,18 @@ class LoadingSkeleton(ft.Container):
                         height=40,
                         bgcolor=ft.Colors.with_opacity(0.05, theme.color_scheme.on_surface),
                         border_radius=8,
-                        margin=ft.margin.only(top=8)
+                        margin=_safe_margin_only(top=8)
                     ),
                     ft.Container(
                         width=100,
                         height=10,
                         bgcolor=ft.Colors.with_opacity(0.08, theme.color_scheme.on_surface),
                         border_radius=4,
-                        margin=ft.margin.only(top=4)
+                        margin=_safe_margin_only(top=4)
                     ),
                 ], spacing=4),
                 padding=16,
-                margin=ft.margin.only(bottom=12)
+                margin=_safe_margin_only(bottom=12)
             )
             skeletons.append(skeleton)
         
@@ -350,7 +422,7 @@ class LoadingSkeleton(ft.Container):
             controls=skeletons,
             spacing=8
         )
-        self.animate_opacity = ft.animation.Animation(1000, ft.AnimationCurve.EASE_IN_OUT)
+        self.animate_opacity = _safe_animation(1000, getattr(ft, "AnimationCurve", None).EASE_IN_OUT if hasattr(ft, "AnimationCurve") else None)
 
 
 class EmptyState(ft.Container):
@@ -387,4 +459,4 @@ class EmptyState(ft.Container):
             alignment=ft.MainAxisAlignment.CENTER
         )
         self.expand = True
-        self.alignment = ft.alignment.center
+        self.alignment = getattr(ft.alignment, "center", ft.Alignment(0, 0))

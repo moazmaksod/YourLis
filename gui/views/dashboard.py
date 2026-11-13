@@ -18,8 +18,8 @@ GROUP_LABELS = {
 # Explicit card color mapping for both light and dark mode
 CARD_COLORS = {
     GROUP_AWAITING_ANALYSIS: {
-        "light": {"bg": ft.Colors.BLACK38, "fg": ft.Colors.WHITE},
-        "dark": {"bg": ft.Colors.BLACK38, "fg": ft.Colors.WHITE},
+        "light": {"bg": getattr(ft.Colors, "BLACK_38", getattr(ft.Colors, "BLACK38", "black38")), "fg": ft.Colors.WHITE},
+        "dark": {"bg": getattr(ft.Colors, "BLACK_38", getattr(ft.Colors, "BLACK38", "black38")), "fg": ft.Colors.WHITE},
     },
     GROUP_UNDER_REVIEW: {
         "light": {"bg": ft.Colors.YELLOW_400, "fg": ft.Colors.BLACK},
@@ -119,12 +119,6 @@ def dashboard_view(page: ft.Page):
     )
 
     async def load_cards():
-        # Helper to resolve coroutine to final result
-        async def resolve_patients(result):
-            while hasattr(result, "__await__"):
-                result = await result
-            return result
-
         page.update()
         try:
             # Convert date to SQL format
@@ -137,15 +131,13 @@ def dashboard_view(page: ft.Page):
                 if state["dashboard_patients_date"] == date_val:
                     patients = state["dashboard_patients"]
                 else:
-                    result = fetch_patient_data(start_date=date_sql, end_date=date_sql)
-                    patients = await resolve_patients(result)
+                    patients = await fetch_patient_data(start_date=date_sql, end_date=date_sql)
                     if patients is None:
                         patients = []
                     state["dashboard_patients"] = patients
                     state["dashboard_patients_date"] = date_val
             else:
-                result = fetch_patient_data(start_date=date_sql, end_date=date_sql)
-                patients = await resolve_patients(result)
+                patients = await fetch_patient_data(start_date=date_sql, end_date=date_sql)
                 if patients is None:
                     patients = []
                 state["dashboard_patients"] = patients
