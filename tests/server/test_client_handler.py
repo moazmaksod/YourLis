@@ -7,7 +7,7 @@ def test_add_communication_message(mock_logger):
     communication_messages.clear()
     clients_with_names.clear()
 
-    clients_with_names[("127.0.0.1", 1234)] = "TestDevice"
+    clients_with_names["127.0.0.1,1234"] = "TestDevice"
 
     add_communication_message(("127.0.0.1", 1234), "Test Message", "in")
 

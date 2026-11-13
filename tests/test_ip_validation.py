@@ -5,12 +5,6 @@ from unittest.mock import MagicMock
 import socket
 import os
 
-# Mock modules that might cause side effects on import in the test environment
-sys.modules["log.logger"] = MagicMock()
-sys.modules["log.log_config"] = MagicMock()
-sys.modules["log"] = MagicMock()
-sys.modules["pyodbc"] = MagicMock()
-
 # Add parent directory to path to import setting.config
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
