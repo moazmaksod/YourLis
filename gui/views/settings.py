@@ -1,9 +1,9 @@
 import flet as ft
 from setting.config import get_config, save_config, get_available_sql_drivers
+from gui.api_methods import test_db_connection_api as test_db_connection
 
 temp_value = "change"
-changed_db_user = "Write new user"
-changed_db_password = "Write new password"
+PASSWORD_PLACEHOLDER = "********"
 
 
 def settings_view(page: ft.Page):
@@ -17,6 +17,7 @@ def settings_view(page: ft.Page):
         setting_to_save = {
             "CONFIG_URL": config_url.value,
             "DARK_MODE": dark_mode.value,
+            "AUTO_START_CBC_SERVER": auto_start_cbc_server.value,
             "SERVER_HOST": server_host.value,
             "SERVER_PORT": server_port.value,
             "DB_TYPE": database_type.value,
@@ -26,52 +27,42 @@ def settings_view(page: ft.Page):
             "DB_NAME": database_name.value,
         }
 
-        if database_user.value != temp_value:
+        if database_user.value and database_user.value != temp_value:
             setting_to_save.update({"DB_USER": database_user.value})
 
-        if database_password.value != temp_value:
+        # Only update password if explicitly changed from placeholder
+        if (
+            database_password.value
+            and database_password.value != PASSWORD_PLACEHOLDER
+            and database_password.value != temp_value
+        ):
             setting_to_save.update({"DB_PASSWORD": database_password.value})
+        else:
+            setting_to_save.update({"DB_PASSWORD": cfg.get("DB_PASSWORD", "")})
+
+        # Validate DB Connection before saving
+        try:
+            test_db_connection(setting_to_save)
+        except Exception as e:
+            # Show error and abort save
+            page.snack_bar = ft.SnackBar(
+                ft.Text(f"Failed to connect to Database: {e}"), 
+                bgcolor="red"
+            )
+            page.snack_bar.open = True
+            page.update()
+            return
 
         save_config(setting_to_save)
+        page.snack_bar = ft.SnackBar(ft.Text("Settings saved successfully!"), bgcolor="green")
+        page.snack_bar.open = True
+        page.update()
 
     def theme_change(e):
         if dark_mode.value:
             page.theme_mode = ft.ThemeMode.DARK
         else:
             page.theme_mode = ft.ThemeMode.LIGHT
-        page.update()
-
-    def show_user(e):
-        # show hidden password
-        if e.control.icon == ft.Icons.REMOVE_RED_EYE_OUTLINED:
-            # show password value
-            database_user.password = False
-            e.control.icon = ft.Icons.REMOVE_RED_EYE
-            page.update()
-        elif e.control.icon == ft.Icons.REMOVE_RED_EYE:
-            # hide password value
-            database_user.password = True
-            e.control.icon = ft.Icons.REMOVE_RED_EYE_OUTLINED
-            page.update()
-
-    def show_password(e):
-        # show hidden password
-        if e.control.icon == ft.Icons.REMOVE_RED_EYE_OUTLINED:
-            # show password value
-            database_password.password = False
-            e.control.icon = ft.Icons.REMOVE_RED_EYE
-            page.update()
-        elif e.control.icon == ft.Icons.REMOVE_RED_EYE:
-            # hide password value
-            database_password.password = True
-            e.control.icon = ft.Icons.REMOVE_RED_EYE_OUTLINED
-            page.update()
-
-    def on_text_change(e):
-        if e.control.value == temp_value:
-            e.control.value = ""
-        elif e.control.value == "":
-            e.control.value = temp_value
         page.update()
 
     # Get available SQL Server drivers
@@ -81,11 +72,25 @@ def settings_view(page: ft.Page):
 
     # settings controls initializing
     config_url = ft.TextField(label="Configuration URL", value=cfg["CONFIG_URL"])
-    dark_mode = ft.Switch(label="Dark mode", value=cfg["DARK_MODE"], on_change=theme_change)
+    dark_mode = ft.Switch(
+        label="Dark mode", value=cfg["DARK_MODE"], on_change=theme_change
+    )
+    auto_start_cbc_server = ft.Switch(
+        label="Auto Start CBC Server", value=cfg.get("AUTO_START_CBC_SERVER", True)
+    )
     server_host = ft.TextField(label="Server Host", value=cfg["SERVER_HOST"])
     server_port = ft.TextField(label="Server Port", value=cfg["SERVER_PORT"])
-    database_type = ft.TextField(label="Database Type", value=cfg["DB_TYPE"])
-    
+    database_type = ft.Dropdown(
+        label="Database Type",
+        value=cfg["DB_TYPE"],
+        options=[
+            ft.dropdown.Option("local"),
+            ft.dropdown.Option("online"),
+        ],
+        width=200,
+        hint_text="Select database type",
+    )
+
     # Create dropdown for database drivers
     database_driver = ft.Dropdown(
         label="Database Driver",
@@ -101,22 +106,20 @@ def settings_view(page: ft.Page):
     database_user = ft.TextField(
         label="Database User",
         hint_text="Enter your database user",
-        password=True,
-        can_reveal_password=True,
-        value=cfg["DB_USER"],
+        value=cfg.get("DB_USER", ""),
     )
     database_password = ft.TextField(
         label="Database Password",
         hint_text="Enter your database password",
         password=True,
-        can_reveal_password=True,
-        value=cfg["DB_PASSWORD"],
+        can_reveal_password=False,
+        value=PASSWORD_PLACEHOLDER if cfg.get("DB_PASSWORD") else "",
     )
 
     application_settings = ft.Container(
         ft.Column(
             [
-                ft.Text("Application Settings", size=18, weight=ft.FontWeight.BOLD),
+                ft.Text("Application Settings", style=ft.TextThemeStyle.HEADLINE_SMALL),
                 ft.Text("Configure the application's appearance and behavior."),
                 ft.Divider(opacity=0),
                 ft.Row(controls=[config_url, dark_mode]),
@@ -127,10 +130,10 @@ def settings_view(page: ft.Page):
     server_settings = ft.Container(
         ft.Column(
             [
-                ft.Text("Server Settings", size=18, weight=ft.FontWeight.BOLD),
+                ft.Text("Server Settings", style=ft.TextThemeStyle.HEADLINE_SMALL),
                 ft.Text("Configure the server's network settings."),
                 ft.Divider(opacity=0),
-                ft.Row(controls=[server_host, server_port]),
+                ft.Row(controls=[server_host, server_port, auto_start_cbc_server]),
             ]
         )
     )
@@ -138,7 +141,7 @@ def settings_view(page: ft.Page):
     database_settings = ft.Container(
         ft.Column(
             [
-                ft.Text("Database Settings", size=18, weight=ft.FontWeight.BOLD),
+                ft.Text("Database Settings", style=ft.TextThemeStyle.HEADLINE_SMALL),
                 ft.Text("Configure the database's connection settings."),
                 ft.Divider(opacity=0),
                 ft.Row(
@@ -159,7 +162,8 @@ def settings_view(page: ft.Page):
     )
 
     # Save button
-    save_button = ft.ElevatedButton(text="Save Settings", on_click=save_settings)
+    ButtonClass = getattr(ft, "FilledButton", getattr(ft, "ElevatedButton", ft.Button))
+    save_button = ButtonClass(text="Save Settings", on_click=save_settings)
 
     # Scrollable settings view
     return ft.Column(

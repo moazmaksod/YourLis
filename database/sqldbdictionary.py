@@ -31,9 +31,7 @@ RESULT_EXIST_SQL = {
     "CONDITION": {"PATIENT_ID": "[patientid]"},
 }
 
-log_info(
-    "Loaded SQL schema for checking the existence of a patient record.", source=SOURCE
-)
+
 
 # Define tables and columns for CBC results to insert or update
 CBC_RESULT_SQL = {
@@ -72,7 +70,6 @@ CBC_RESULT_SQL = {
     },
     "CONDITION": {"PATIENT_ID": "[patientid]"},
 }
-log_info("Loaded SQL schema for CBC results to insert or update.", source=SOURCE)
 
 # Define tables and columns for HGB results to insert or update
 HGB_RESULT_SQL = {
@@ -87,7 +84,6 @@ HGB_RESULT_SQL = {
     },
     "CONDITION": {"PATIENT_ID": "[patientid]"},
 }
-log_info("Loaded SQL schema for HGB results to insert or update.", source=SOURCE)
 
 # Define tables and columns for retrieving patient information
 PATIENT_INFO_SQL = {
@@ -102,7 +98,6 @@ PATIENT_INFO_SQL = {
     },
     "CONDITION": {"PATIENT_ID": "[patientid]"},
 }
-log_info("Loaded SQL schema for retrieving patient information.", source=SOURCE)
 
 # Define tables and columns for retrieving the patient's waiting list for tests based on test code
 PATIENT_TEST_SQL = {
@@ -111,15 +106,19 @@ PATIENT_TEST_SQL = {
     "COLUMN_NAME": {"TEST_CODE": "[testcode]", "RESULT_STATE": "[resultfinsh]"},
     "CONDITION": {"PATIENT_ID": "[patientid]"},
 }
-log_info(
-    "Loaded SQL schema for retrieving the patient's waiting list for tests based on test code.",
-    source=SOURCE,
-)
 
 
-# Define the procedure name and parameter for patient info fetching
+
+
+
+
+# This dictionary maps a key to a stored procedure definition.
+# The definition includes the procedure name and the expected parameters.
+
+
+# Used in: gui/views/patient.py
 PATIENT_SEARCH_SQL = {
-    "PROCEDURE_NAME": "GetPatientInfo",
+    "PROCEDURE_NAME": "dbo.GetPatientInfo",
     "PARAMETERS": [
         "PATIENT_ID",
         "PATIENT_NAME",
@@ -129,9 +128,32 @@ PATIENT_SEARCH_SQL = {
     ],
 }
 
-
-# Define procedure name and parameter for patient test fetching
+# Used in: gui/views/cbc_report.py
 PATIENT_CBC_RESULT_SQL = {
-    "PROCEDURE_NAME": "GetPatientCBCResult",
+    "PROCEDURE_NAME": "dbo.GetPatientCBCResult",
     "PARAMETERS": ["PATIENT_ID"],
+}
+
+# Used in: gui/views/send_out.py
+SEND_OUT_SEARCH_SQL = {
+    "PROCEDURE_NAME": "dbo.GetSendOutSamples",
+    "PARAMETERS": ["PatientID", "PatientName", "StartDate", "EndDate", "DestinationLab", "Status"],
+}
+
+# Used in: gui/views/send_out.py for the "Mark as Sent" button
+INSERT_SEND_OUT_LOG_SQL = {
+    "PROCEDURE_NAME": "dbo.InsertSendOutLog",
+    "PARAMETERS": ["PatientID", "TestName", "SentDate"],
+}
+
+# Used in: gui/views/send_out.py
+GET_DESTINATION_LABS_SQL = {
+    "PROCEDURE_NAME": "dbo.GetDestinationLabs",
+    "PARAMETERS": [],
+}
+
+# Used in: gui/views/send_out.py for editing Price and Amount Paid
+UPDATE_SEND_OUT_FINANCIALS_SQL = {
+    "PROCEDURE_NAME": "dbo.UpdateSendOutFinancials",
+    "PARAMETERS": ["PatientID", "TestName", "Price", "AmountPaid", "DestinationLab", "EditDate", "Status"],
 }

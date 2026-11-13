@@ -56,7 +56,14 @@ def server_control(page: ft.Page):
         result = await toggle_server_state(
             server_status["state"]
         )  # Toggle server state using the API
-        await status_updater.periodic_status_check()  # Refresh status immediately after toggle
+        
+        message = result.get("message", "")
+        if "Failed" in message or "Exception" in message:
+             page.snack_bar = ft.SnackBar(ft.Text(message), bgcolor="red")
+             page.snack_bar.open = True
+             page.update()
+
+        await status_updater.manual_status_refresh()  # Refresh status immediately after toggle
 
     # Server status indicator
     status_indicator = ft.Container(
@@ -76,13 +83,13 @@ def server_control(page: ft.Page):
 
     # Server status updater
     status_updater = ServerStatusUpdater(
-        status_indicator, server_button, server_status, clients_avatars, page
+        status_indicator, server_button, server_status, clients_avatars
     )
 
     divider = ft.Text("     ")
 
     # App header layout
-    return ft.Row(
+    header_row = ft.Row(
         controls=[
             status_updater,
             ft.Row(
@@ -100,6 +107,9 @@ def server_control(page: ft.Page):
         ],
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
     )
+    
+    # Return both the UI and the status_updater instance for manual subscription setup
+    return header_row, status_updater
 
 
 def side_menu(on_item_click):
@@ -116,13 +126,13 @@ def side_menu(on_item_click):
                     icon=ft.Icon(ft.Icons.SPACE_DASHBOARD), label="Dashboard"
                 ),
                 ft.NavigationRailDestination(
-                    icon=ft.Icon(ft.Icons.NEWSPAPER), label="Results"
+                    icon=ft.Icon(ft.Icons.INSERT_COMMENT_ROUNDED), label="Stream"
+                ),
+                ft.NavigationRailDestination(
+                    icon=ft.Icon(ft.Icons.SEND_AND_ARCHIVE_OUTLINED), label="Send Out"
                 ),
                 ft.NavigationRailDestination(
                     icon=ft.Icon(ft.Icons.GROUPS_SHARP), label="patient"
-                ),
-                ft.NavigationRailDestination(
-                    icon=ft.Icon(ft.Icons.INSERT_CHART_ROUNDED), label="Reports"
                 ),
                 ft.NavigationRailDestination(
                     icon=ft.Icon(ft.Icons.SETTINGS), label="Settings"
@@ -132,89 +142,8 @@ def side_menu(on_item_click):
                 ),
             ],
         ),
-        height=600
+        height=600,
     )
-
-
-def login_dialog(page: ft.Page):
-    """
-    Show a login dialog for the app.
-    """
-
-    cfg = get_config()  # Load configuration from file
-    try:
-        app_user = cfg["APP_USER"]
-        app_password = cfg["APP_PASSWORD"]
-    except KeyError:
-        app_user = "admin"
-        app_password = "admin"
-
-    # Input fields for username and password
-    username_field = ft.TextField(label="Username", value=app_user)
-    password_field = ft.TextField(
-        label="Password",
-        value=app_password,
-        password=True,
-        can_reveal_password=True,
-    )
-    remember_me = ft.Checkbox(label="Remember me", value=False)
-    login_message = ft.Text("")
-
-    # Handlers for login and close actions
-    def login_click(e):
-        username = username_field.value.strip() if username_field.value != None else ""
-        password = password_field.value.strip() if password_field.value != None else ""
-
-        # Example validation logic (replace with your logic)
-        if username == app_user and password == app_password:
-            login_message.value = "Login successful!"
-            login_dialog.open = False  # Close the dialog
-            # Navigate to the main page or perform further actions
-            if remember_me.value:
-                save_config({"APP_USER": username, "APP_PASSWORD": password})
-
-        else:
-            login_message.value = "Invalid username or password!"
-
-        page.update()
-
-    # Close confirmation dialog handlers
-    async def close_click(e):
-        # Perform cleanup or saving logic here if needed
-        await close_app(page)
-
-    # Login dialog with username and password fields
-    login_dialog = ft.AlertDialog(
-        modal=True,
-        title=ft.Text("Login"),
-        content=ft.Column(
-            controls=[
-                username_field,
-                password_field,
-                login_message,
-            ],
-            tight=True,
-        ),
-        actions=[
-            remember_me,
-            ft.Divider(opacity=0),
-            ft.Row(
-                [
-                    ft.ElevatedButton("Login", on_click=login_click),
-                    ft.OutlinedButton("Close", on_click=close_click),
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            ),
-        ],
-        actions_alignment=ft.MainAxisAlignment.END,
-    )
-
-    # Show the dialog
-    page.overlay.append(login_dialog)
-    login_dialog.open = True
-    page.update()
-
-    return login_dialog
 
 
 def footer():
@@ -248,18 +177,80 @@ def close_confirm_dialog(page: ft.Page):
         await close_app(page)
 
     def no_click(e):
-        confirm_dialog.open = False  # Close the dialog
-        page.update()  # Update the page to reflect changes
+        dismiss_dialog(page, confirm_dialog)
 
     # Confirmation dialog
+    primary_btn_cls = getattr(ft, "FilledButton", getattr(ft, "ElevatedButton", ft.Button))
+    outlined_btn_cls = getattr(ft, "OutlinedButton", ft.Button)
+
     confirm_dialog = ft.AlertDialog(
         title=ft.Text("Please confirm"),
         content=ft.Text("Do you really want to exit this app?"),
         actions=[
-            ft.ElevatedButton("Yes", on_click=yes_click),
-            ft.OutlinedButton("No", on_click=no_click),
+            primary_btn_cls("Yes", on_click=yes_click),
+            outlined_btn_cls("No", on_click=no_click),
         ],
         actions_alignment=ft.MainAxisAlignment.END,
     )
 
     return confirm_dialog
+
+
+def db_conn_fail_dialog(page: ft.Page, on_settings=None):
+    """
+    Return an alert dialog for database connection failure with options to configure settings or exit.
+    """
+    async def exit_click(e):
+        await close_app(page)
+
+    def settings_click(e):
+        dismiss_dialog(page, conn_dialog)
+        if on_settings:
+            on_settings()
+
+    primary_btn_cls = getattr(ft, "FilledButton", getattr(ft, "ElevatedButton", ft.Button))
+    outlined_btn_cls = getattr(ft, "OutlinedButton", ft.Button)
+
+    conn_dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Database Connection Failed"),
+        content=ft.Text(
+            "Could not connect to the database. Please check your database credentials or server configuration."
+        ),
+        actions=[
+            primary_btn_cls("Open Settings", on_click=settings_click),
+            outlined_btn_cls("Exit", on_click=exit_click),
+        ],
+        actions_alignment=ft.MainAxisAlignment.END,
+    )
+    return conn_dialog
+
+
+def show_dialog(page: ft.Page, dialog: ft.AlertDialog):
+    """Safely opens a modal or alert dialog across all Flet versions without leaving orphaned modal barriers."""
+    if hasattr(page, "open"):
+        page.open(dialog)
+    else:
+        if dialog not in page.overlay:
+            page.overlay.append(dialog)
+        dialog.open = True
+        page.update()
+
+
+def dismiss_dialog(page: ft.Page, dialog: ft.AlertDialog):
+    """Safely closes an alert dialog across all Flet versions without tearing down the widget tree during transition."""
+    dialog.open = False
+    if hasattr(page, "close") and callable(getattr(page, "close")):
+        try:
+            page.close(dialog)
+        except Exception:
+            pass
+    if hasattr(page, "update") and callable(getattr(page, "update")):
+        try:
+            page.update()
+        except Exception:
+            pass
+
+
+
+

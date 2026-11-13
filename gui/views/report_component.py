@@ -1,67 +1,80 @@
-﻿from calendar import c
-from ctypes.util import test
-from itertools import tee
-from pydoc import text
-from turtle import back
 import flet as ft
 import datetime
-from gui.views.cbc_normal_ranges import determine_age_group, get_normal_range, set_flag,NORMAL_RANGES
+from gui.views.cbc_normal_ranges import (
+    determine_age_group,
+    get_normal_range,
+    set_flag,
+    NORMAL_RANGES,
+)
 
 # Date format settings
 gui_time_format = "%d-%m-%Y"
 sql_time_format = "%Y-%m-%d"
 
 
+def _safe_border_all(width: float = 1, color=None):
+    """Safely construct a border across Flet versions."""
+    if hasattr(ft, "Border") and hasattr(ft.Border, "all"):
+        return ft.Border.all(width, color) if color else ft.Border.all(width)
+    if hasattr(ft, "border") and hasattr(ft.border, "all"):
+        return ft.border.all(width, color) if color else ft.border.all(width)
+    return None
+
+
 class ReportPatientInfo(ft.Container):
 
-	def __init__(self, patient_info: dict):
-		super().__init__(
-			content=None,
-			padding=ft.padding.all(10),
-			border=ft.border.all(1),
-			width=794,
-		)
-		self.patient_info = patient_info
+    def __init__(self, patient_info: dict):
+        super().__init__(
+            content=None,
+            padding=10,
+            border=_safe_border_all(1),
+            width=794,
+        )
+        self.patient_info = patient_info
 
-		self.patient_id = self.patient_info.get("Patient ID", "")
-		self.name = self.patient_info.get("Name", "")
-		self.age = int(self.patient_info.get("Age", ""))
-		self.age_unit = self.patient_info.get("Age Unit", "")
-		self.gender = self.patient_info.get("Gender", "")
+        self.patient_id = self.patient_info.get("Patient ID", "")
+        self.name = self.patient_info.get("Name", "")
+        self.age = int(self.patient_info.get("Age", ""))
+        self.age_unit = self.patient_info.get("Age Unit", "")
+        self.gender = self.patient_info.get("Gender", "")
 
-		self.requested_date = self.patient_info.get("Requested Date", "").strftime(
-			gui_time_format
-		)
-		self.report_date = datetime.date.today().strftime(gui_time_format)
+        requested_date_value = self.patient_info.get("Requested Date", None)
+        if requested_date_value and hasattr(requested_date_value, "strftime"):
+            self.requested_date = requested_date_value.strftime(gui_time_format)
+        else:
+            self.requested_date = "N/A"
+        self.report_date = datetime.date.today().strftime(gui_time_format)
 
-		self.content = ft.Row(
-			controls=[
-				ft.Column(
-					[
-						ft.Text(value=f"Name : {self.name}"),
-						ft.Text(value=f"Age : {self.age} {self.age_unit}"),
-						ft.Text(value=f"Sex : {self.gender}"),
-					],
-					expand=True,
-				),
-				ft.Column(
-					[
-						ft.Text(value=f"ID : {self.patient_id}"),
-						ft.Text(value=f"Requested Date : {self.requested_date}"),
-						ft.Text(value=f"Report Date : {self.report_date}"),
-					],
-					expand=True,
-				),
-			],
-			expand=True,
-		)
+        self.content = ft.Row(
+            controls=[
+                ft.Column(
+                    [
+                        ft.Text(value=f"Name : {self.name}"),
+                        ft.Text(value=f"Age : {self.age} {self.age_unit}"),
+                        ft.Text(value=f"Sex : {self.gender}"),
+                    ],
+                    spacing=2,  # Reduced vertical spacing between text lines
+                    expand=True,
+                ),
+                ft.Column(
+                    [
+                        ft.Text(value=f"ID : {self.patient_id}"),
+                        ft.Text(value=f"Requested Date : {self.requested_date}"),
+                        ft.Text(value=f"Report Date : {self.report_date}"),
+                    ],
+                    spacing=2,  # Reduced vertical spacing between text lines
+                    expand=True,
+                ),
+            ],
+            expand=True,
+        )
 
 
 class ReportPatientResult(ft.Container):
     def __init__(self, patient_result: dict):
         super().__init__(
             padding=10,
-            border=ft.border.all(1),
+            border=_safe_border_all(1),
             width=794,
             expand=True,
         )
@@ -76,29 +89,28 @@ class ReportPatientResult(ft.Container):
         """
         return {
             # HGB
-            "Hemoglobin (HGB)":               dict(size=16, space=0, icon="❤️"),
-
+            "Hemoglobin (HGB)": dict(size=16, space=0, icon="❤️"),
             # RBC block
-            "Red Blood Cells (RBC)":          dict(size=16, space=0, icon="🩸"),
-            "Hematocrit (HCT)":               dict(size=14, space=15, icon="🩸"),
-            "Mean Corpuscular Volume (MCV)":  dict(size=14, space=15, icon="🩸"),
-            "Mean Corpuscular Hemoglobin (MCH)":  dict(size=14, space=15, icon="🩸"),
-            "Mean Corpuscular Hemoglobin Concentration (MCHC)": dict(size=14, space=15, icon="🩸"),
+            "Red Blood Cells (RBC)": dict(size=16, space=0, icon="🩸"),
+            "Hematocrit (HCT)": dict(size=14, space=15, icon="🩸"),
+            "Mean Corpuscular Volume (MCV)": dict(size=14, space=15, icon="🩸"),
+            "Mean Corpuscular Hemoglobin (MCH)": dict(size=14, space=15, icon="🩸"),
+            "Mean Corpuscular Hemoglobin Concentration (MCHC)": dict(
+                size=14, space=15, icon="🩸"
+            ),
             "Red Cell Distribution Width (RDW)": dict(size=14, space=15, icon="🩸"),
-
             # PLT block
-            "Platelets (PLT)":                dict(size=16, space=0, icon="🧫"),
-            "Plateletcrit (PCT)":             dict(size=14, space=15, icon="🧫"),
-            "Mean Platelet Volume (MPV)":     dict(size=14, space=15, icon="🧫"),
+            "Platelets (PLT)": dict(size=16, space=0, icon="🧫"),
+            "Plateletcrit (PCT)": dict(size=14, space=15, icon="🧫"),
+            "Mean Platelet Volume (MPV)": dict(size=14, space=15, icon="🧫"),
             "Platelet Distribution Width (PDW)": dict(size=14, space=15, icon="🧫"),
-
             # WBC block
-            "White Blood Cells (WBC)":        dict(size=16, space=0, icon="🛡️"),
-            "Neutrophils":                    dict(size=14, space=15, icon="🛡️"),
-            "Lymphocytes":                    dict(size=14, space=15, icon="🛡️"),
-            "Monocytes":                      dict(size=14, space=15, icon="🛡️"),
-            "Eosinophils":                    dict(size=14, space=15, icon="🛡️"),
-            "Basophils":                      dict(size=14, space=15, icon="🛡️"),
+            "White Blood Cells (WBC)": dict(size=16, space=0, icon="🛡️"),
+            "Neutrophils": dict(size=14, space=15, icon="🛡️"),
+            "Lymphocytes": dict(size=14, space=15, icon="🛡️"),
+            "Monocytes": dict(size=14, space=15, icon="🛡️"),
+            "Eosinophils": dict(size=14, space=15, icon="🛡️"),
+            "Basophils": dict(size=14, space=15, icon="🛡️"),
         }
 
     # ---------- table builder ---------------------------------------------
@@ -108,60 +120,66 @@ class ReportPatientResult(ft.Container):
         rows: list[ft.DataRow] = []
 
         # helper: skip non-test keys
-        skip = {
-            "Patient ID", "Name", "Age", "Age Unit", "Gender", "Requested Date"
-        }
+        skip = {"Patient ID", "Name", "Age", "Age Unit", "Gender", "Requested Date"}
 
         for test_name, test_value in patient_result.items():
             if test_name in skip or test_value in (None, ""):
                 continue
 
             # ---- laboratory logic ----------------------------------------
-            age       = int(patient_result["Age"])
-            age_unit  = patient_result["Age Unit"]
-            gender    = patient_result["Gender"]
+            age = int(patient_result["Age"])
+            age_unit = patient_result["Age Unit"]
+            gender = patient_result["Gender"]
             age_group = determine_age_group(age, age_unit)
 
             normal_range = get_normal_range(test_name, age_group, gender)
-            unit         = NORMAL_RANGES[test_name]["unit"]
-            range_txt    = (
+            unit = NORMAL_RANGES[test_name]["unit"]
+            range_txt = (
                 f"{normal_range[0]} - {normal_range[1]}"
-                if isinstance(normal_range, tuple) else "N/A"
+                if isinstance(normal_range, tuple)
+                else "N/A"
             )
 
-            flag, flag_color = set_flag(test_value, normal_range)
+            # Only call set_flag if normal_range is a tuple and not None
+            if normal_range is not None and isinstance(normal_range, tuple):
+                flag_result = set_flag(test_value, normal_range)
+                if flag_result is None or flag_result == "Unknown":
+                    flag, flag_color = "", "#222"
+                else:
+                    flag, flag_color = flag_result
+            else:
+                flag, flag_color = "", "#222"
             s = style[test_name]
 
             # ---- compose first cell: indent + icon + name ----------------
             first_cell = ft.Row(
-                #spacing=4,
+                # spacing=4,
                 controls=[
-                    ft.Container(width=s["space"]),       # indent
+                    ft.Container(width=s["space"]),  # indent
                     ft.Text(s["icon"], size=s["size"]),
-                    ft.Text(test_name,     size=s["size"])
-                ])
+                    ft.Text(test_name, size=s["size"]),
+                ]
+            )
 
             # ---- build the DataRow ---------------------------------------
             rows.append(
                 ft.DataRow(
                     cells=[
                         ft.DataCell(first_cell),
-                        ft.DataCell(ft.Text(str(test_value),
-                                           size= s["size"],
-                                           color=flag_color)),
-                        ft.DataCell(ft.Text(flag,
-                                            size=16,
-                                            color=flag_color)),
-						ft.DataCell(ft.Row(
-									[
-									ft.Text(range_txt,
-											size=s["size"]),
-									ft.Text(unit,
-											size=s["size"],
-											color=ft.Colors.GREY)
-									],
-									),
-						),
+                        ft.DataCell(
+                            ft.Text(str(test_value), size=s["size"], color=flag_color)
+                        ),
+                        ft.DataCell(ft.Text(flag, size=16, color=flag_color)),
+                        ft.DataCell(
+                            ft.Row(
+                                [
+                                    ft.Text(range_txt, size=s["size"]),
+                                    ft.Text(
+                                        unit, size=s["size"], color=ft.Colors.GREY_600
+                                    ),  # Adjusted color
+                                ],
+                            ),
+                        ),
                     ]
                 )
             )
@@ -174,4 +192,10 @@ class ReportPatientResult(ft.Container):
             ft.DataColumn(ft.Text("Reference")),
         ]
 
-        return ft.DataTable(columns=columns, rows=rows, column_spacing=12)
+        return ft.DataTable(
+            columns=columns,
+            rows=rows,
+            column_spacing=12,
+            data_row_min_height=35,  # Reduced row height
+            data_row_max_height=35,  # Reduced row height
+        )

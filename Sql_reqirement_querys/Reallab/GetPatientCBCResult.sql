@@ -1,11 +1,15 @@
-USE [patients]
-GO
 
-/****** Object:  StoredProcedure [dbo].[GetPatientCBCResult]    Script Date: 5/23/2025 1:25:25 AM ******/
+
+/****** Object:  StoredProcedure [dbo].[GetPatientCBCResult]    Script Date: 8/15/2025 10:41:22 PM ******/
 SET ANSI_NULLS ON
 GO
 
 SET QUOTED_IDENTIFIER ON
+GO
+
+
+IF OBJECT_ID('dbo.GetPatientCBCResult', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.GetPatientCBCResult;
 GO
 
 CREATE PROCEDURE [dbo].[GetPatientCBCResult]

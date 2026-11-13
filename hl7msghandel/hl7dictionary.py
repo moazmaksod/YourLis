@@ -33,7 +33,6 @@ RESULT_EXIST_HL7 = {
         }
     }
 }
-log_info("Loaded HL7 message schema for check if there is a record for the patient id before.", source=SOURCE)
 
 # Define tables and columns for CBC results to insert or update
 CBC_RESULT_HL7 = {
@@ -140,7 +139,6 @@ CBC_RESULT_HL7 = {
         }
     }
 }
-log_info("Loaded HL7 message schema for CBC results.", source=SOURCE)
 
 # Define tables and columns for Hgb results to insert or update
 HGB_RESULT_HL7 = {
@@ -175,7 +173,6 @@ HGB_RESULT_HL7 = {
         }
     }
 }
-log_info("Loaded HL7 message schema for HGB results.", source=SOURCE)
 
 # Define tables and columns for getting the patient info (ORU HL7)
 PATIENT_INFO_ORU_HL7 = {
@@ -194,7 +191,6 @@ PATIENT_INFO_ORU_HL7 = {
         }
     }
 }
-log_info("Loaded HL7 message schema for patient info from result message.", source=SOURCE)
 
 # Define tables and columns for getting the patient info (ORM HL7)
 PATIENT_INFO_ORM_HL7 = {
@@ -213,7 +209,6 @@ PATIENT_INFO_ORM_HL7 = {
         }
     }
 }
-log_info("Loaded HL7 message schema for patient info from request message.", source=SOURCE)
 
 # Dictionary for converting SQL to HL7 values
 PATIENT_INFO_SQL_TO_HL7_DICT = {
@@ -224,7 +219,6 @@ PATIENT_INFO_SQL_TO_HL7_DICT = {
     'Days' : '3',
     'Hours' : '4'
 }
-log_info("Loaded HL7 schema for convert info symbol from sql .", source=SOURCE)
 
 # Default values for patient info if not found
 DEFULT_PATIENT_INFO_HL7 = {
@@ -233,7 +227,6 @@ DEFULT_PATIENT_INFO_HL7 = {
     "AGE" :'30',
     "AGE_UNIT" :'1'
 }
-log_info("Loaded HL7 default patient info.", source=SOURCE)
 
 # Define tables and columns for patient test waiting list based on test code
 PATIENT_TEST_HL7 = {
@@ -249,4 +242,3 @@ PATIENT_TEST_HL7 = {
         }
     }
 }
-log_info("Loaded HL7 message schema for patient requested test waiting list.", source=SOURCE)
