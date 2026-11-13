@@ -3,6 +3,12 @@ from unittest.mock import MagicMock
 
 # Mock pyodbc before it is imported by any module to avoid ImportError due to missing system libraries
 mock_pyodbc = MagicMock()
+class MockOperationalError(Exception): pass
+class MockDatabaseError(Exception): pass
+class MockError(Exception): pass
+mock_pyodbc.OperationalError = MockOperationalError
+mock_pyodbc.DatabaseError = MockDatabaseError
+mock_pyodbc.Error = MockError
 sys.modules["pyodbc"] = mock_pyodbc
 
 import pytest
@@ -11,6 +17,21 @@ import os
 
 # Add the project root to the python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+@pytest.fixture(autouse=True)
+def reset_connection_pool():
+    """Resets the singleton connection pool before and after each test."""
+    try:
+        from database.sqlconnection import get_connection_pool
+        get_connection_pool().close_all()
+    except Exception:
+        pass
+    yield
+    try:
+        from database.sqlconnection import get_connection_pool
+        get_connection_pool().close_all()
+    except Exception:
+        pass
 
 @pytest.fixture
 def mock_logger(mocker):

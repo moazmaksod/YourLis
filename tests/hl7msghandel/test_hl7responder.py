@@ -104,4 +104,26 @@ def test_generate_response_message_unknown(mocker, mock_logger):
 
     response = generate_response_message(hl7_msg)
 
-    assert response["respose"] is None
+    # Unknown message type now returns an explicit NAK (AR) per Task 2.2
+    assert response["response"] is not None
+    assert "MSA|AR|ID123|" in response["response"]
+
+
+def test_generate_nak_response():
+    from hl7msghandel.hl7responder import generate_nak_response
+
+    # Test with explicit msg_id
+    nak = generate_nak_response(msg_id="MSG999", error_msg="Syntax error in segment", ack_code="AE")
+    assert "MSA|AE|MSG999|Syntax error in segment|" in nak
+    assert nak.startswith("\x0b")
+    assert nak.endswith("\x1c\r")
+
+    # Test with raw HL7 frame extraction
+    raw_frame = b"\x0bMSH|^~\\&|Analyzer||||20260101||ORU^R01|CTRL888|P|2.3.1\rPID|1||123\r\x1c\r"
+    nak_extracted = generate_nak_response(hl7_message=raw_frame, error_msg="Database down", ack_code="AE")
+    assert "MSA|AE|CTRL888|Database down|" in nak_extracted
+
+    # Test delimiter sanitization
+    nak_sanitized = generate_nak_response(msg_id="ID1", error_msg="Line 1|Error\rLine 2\nDetail")
+    assert "Line 1/Error Line 2 Detail" in nak_sanitized
+

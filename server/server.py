@@ -33,6 +33,7 @@ def check_server_start_capability():
     try:
         # We try to bind to the specific port to see if it's available too
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((server_host, server_port))
     except socket.error as e:
         if e.errno == 10049: # Address not available
@@ -109,13 +110,12 @@ async def run_server():
             await stop_event.wait()  # Wait for the stop event
             log_info("Server is shutting down...", source=SOURCE)
 
-            # Cancel all client tasks
-            for task in server_tasks:
+            # Cancel all client tasks using a snapshot to avoid list mutation bug
+            tasks_to_cancel = list(server_tasks)
+            for task in tasks_to_cancel:
                 task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+            if tasks_to_cancel:
+                await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
 
             server.close()
             await server.wait_closed()
@@ -151,11 +151,10 @@ async def client_connected(reader, writer):
     try:
         await task
     except asyncio.CancelledError:
-        log_info("Client connection forcibly closed.", source=SOURCE)
-        writer.close()
-        await writer.wait_closed()
+        log_info("Client connection cancelled during server shutdown.", source=SOURCE)
     finally:
-        server_tasks.remove(task)
+        if task in server_tasks:
+            server_tasks.remove(task)
 
 
 async def start_server():

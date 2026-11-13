@@ -69,3 +69,29 @@ def test_update_hl7_dictionary_from_msg(mock_logger):
     assert updated["COLUMN_NAME"]["Col1"] == "ValueFromMsg"
     # Verify call
     hl7_msg.segments.assert_any_call("PID")
+
+
+def test_update_hl7_dictionary_missing_segment_sets_none(mock_logger):
+    """
+    Verify that when an HL7 segment extraction fails (missing segment/field),
+    the field value is set explicitly to None instead of leaving dictionary metadata.
+    """
+    hl7_msg = MagicMock()
+    # Simulate missing OBX segment throwing IndexError
+    hl7_msg.segments.side_effect = IndexError("Segment not found")
+
+    hl7_dict = {
+        "COLUMN_NAME": {
+            "MissingTest": {"S": "OBX", "N": "15", "F": "5"}
+        },
+        "CONDITION": {
+            "MissingCond": {"S": "OBX", "N": "15", "F": "3"}
+        }
+    }
+
+    updated = update_hl7_dictionary(hl7_msg, hl7_dict)
+
+    # Values must be None (representing SQL NULL), NOT the {"S": ..., "N": ..., "F": ...} dict!
+    assert updated["COLUMN_NAME"]["MissingTest"] is None
+    assert updated["CONDITION"]["MissingCond"] is None
+

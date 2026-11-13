@@ -1,4 +1,4 @@
-from log.logger import log_info, log_error
+from log.logger import log_info, log_error, mask_identifier
 from setting.config import get_config, save_config
 from database.sqlqueries import *
 from database.sqldbdictionary import *
@@ -67,16 +67,20 @@ def generate_response_message(hl7_message):
         if hl7_message_type == "ORU^R01":  # CBC device result_msg <<<
 
             # handel result message and generate ack message
+            res = handel_result_message(hl7_message, msg_id)
             return {
-                "respose": handel_result_message(hl7_message, msg_id),
+                "response": res,
+                "respose": res,  # Retained for backward compatibility
                 "sender": sender_name_ver,
             }
 
         elif hl7_message_type == "ORM^O01":  # CBC device info_request_msg <<<
 
             # handel info request message and generate info message for send it
+            res = handel_info_request_message(hl7_message, msg_id)
             return {
-                "respose": handel_info_request_message(hl7_message, msg_id),
+                "response": res,
+                "respose": res,  # Retained for backward compatibility
                 "sender": sender_name_ver,
             }
 
@@ -85,16 +89,23 @@ def generate_response_message(hl7_message):
                 f"Analyser Succsessfully recevie patient info.\n No need to Respond to message NO.:{msg_id} with type:{hl7_message_type}.",
                 source=SOURCE,
             )
-            return {"respose": None, "sender": sender_name_ver}
+            return {"response": None, "respose": None, "sender": sender_name_ver}
         else:
             log_info(
                 f"Unknown message type {hl7_message_type}, message NO.:{msg_id}.",
                 source=SOURCE,
             )
-            return {"respose": None, "sender": sender_name_ver}
+            nak = generate_nak_response(
+                hl7_message,
+                f"Unsupported message type {hl7_message_type}",
+                ack_code="AR",
+                msg_id=msg_id,
+            )
+            return {"response": nak, "respose": nak, "sender": sender_name_ver}
     except Exception as e:
         log_error(f"Error generating HL7 response: {e}", source=SOURCE)
-        return {"respose": None, "sender": None}
+        nak = generate_nak_response(hl7_message, str(e), ack_code="AE")
+        return {"response": nak, "respose": nak, "sender": None}
 
 
 def handel_result_message(hl7_message, msg_id):
@@ -151,7 +162,7 @@ def handel_result_message(hl7_message, msg_id):
                             CBC_RESULT_SQL, CBC_RESULT_HL7, hl7_message, request_date
                         )
                         log_info(
-                            f"CBC result for : {patient_name} saved succsesfully",
+                            f"CBC result saved successfully [msg_id: {msg_id}, patient: {mask_identifier(patient_name)}]",
                             source=SOURCE,
                         )
                     else:
@@ -160,7 +171,7 @@ def handel_result_message(hl7_message, msg_id):
                             CBC_RESULT_SQL, CBC_RESULT_HL7, hl7_message, request_date
                         )
                         log_info(
-                            f"CBC result for : {patient_name} updated succsesfully",
+                            f"CBC result updated successfully [msg_id: {msg_id}, patient: {mask_identifier(patient_name)}]",
                             source=SOURCE,
                         )
 
@@ -172,7 +183,7 @@ def handel_result_message(hl7_message, msg_id):
                             HGB_RESULT_SQL, HGB_RESULT_HL7, hl7_message, request_date
                         )
                         log_info(
-                            f"Haemoglobin result for : {patient_name} saved succsesfully",
+                            f"Haemoglobin result saved successfully [msg_id: {msg_id}, patient: {mask_identifier(patient_name)}]",
                             source=SOURCE,
                         )
                     else:
@@ -181,7 +192,7 @@ def handel_result_message(hl7_message, msg_id):
                             HGB_RESULT_SQL, HGB_RESULT_HL7, hl7_message, request_date
                         )
                         log_info(
-                            f"Haemoglobin result for : {patient_name} updated succsesfully",
+                            f"Haemoglobin result updated successfully [msg_id: {msg_id}, patient: {mask_identifier(patient_name)}]",
                             source=SOURCE,
                         )
                 else:
@@ -259,6 +270,46 @@ def generate_ack_message(msg_id, ack_code):
     except Exception as e:
         log_error(f"Error generating ACK message: {e}", source=SOURCE)
         return None
+
+
+def generate_nak_response(
+    hl7_message=None,
+    error_msg: str = "Error processing message",
+    ack_code: str = "AE",
+    msg_id: str = None,
+) -> str:
+    """
+    Generates a standard MLLP-framed HL7 NAK response (MSA|AE or MSA|AR) for error handling.
+    Extracts MSH-10 message control ID from hl7_message if msg_id is not explicitly provided.
+    """
+    if not msg_id:
+        if hl7_message:
+            try:
+                decoded = (
+                    hl7_message.decode("utf-8", errors="ignore")
+                    if isinstance(hl7_message, bytes)
+                    else str(hl7_message)
+                )
+                for segment in decoded.replace("\r", "\n").split("\n"):
+                    seg_clean = segment.strip().strip("\x0b").strip("\x1c")
+                    if seg_clean.startswith("MSH|"):
+                        parts = seg_clean.split("|")
+                        if len(parts) > 9 and parts[9].strip():
+                            msg_id = parts[9].strip()
+                            break
+            except Exception:
+                pass
+        if not msg_id:
+            msg_id = "UNKNOWN"
+
+    clean_error = (
+        str(error_msg).replace("|", "/").replace("\r", " ").replace("\n", " ")[:120]
+    )
+    nak_message = (
+        f"\x0bMSH|^~\\&|{APPLICATION_NAME}|{VERSION}|||{time_now()}||ACK|{msg_id}|P|2.3.1|||||CHA|UTF-8|||\r"
+        f"MSA|{ack_code}|{msg_id}|{clean_error}|||0|\r\x1c\r"
+    )
+    return nak_message
 
 
 def generate_order_response(msg_id, patient_info: dict):

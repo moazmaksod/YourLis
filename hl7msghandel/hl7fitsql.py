@@ -54,7 +54,8 @@ def update_hl7_dictionary(hl7_message, hl7_dictionary, sql_data=None, manual_dat
                 result_value = hl7_message.segments(segment)[s_number][field]
                 result_dictionary[key] = result_value
             except Exception as e:
-                log_error(f"Error updating condition dictionary: {e}", source=SOURCE)
+                log_error(f"Error extracting HL7 field {key}: {e}", source=SOURCE)
+                result_dictionary[key] = None
 
     # Remove keys from the result dictionary that were marked for deletion
     for result in result_dictionary_deleted_list:
@@ -72,6 +73,7 @@ def update_hl7_dictionary(hl7_message, hl7_dictionary, sql_data=None, manual_dat
             condition_value = hl7_message.segments(segment)[s_number][field]
             condition_dictionary[key] = condition_value
         except Exception as e:
-            log_error(f"Error updating condition dictionary: {e}", source=SOURCE)
+            log_error(f"Error extracting condition field {key}: {e}", source=SOURCE)
+            condition_dictionary[key] = None
 
     return hl7_dictionary_copy
