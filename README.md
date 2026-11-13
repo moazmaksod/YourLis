@@ -1,30 +1,66 @@
 # YourLIS
 
-YourLIS is a modern Laboratory Information System (LIS) built with Python, Flet, and FastAPI. It streamlines laboratory workflows by providing a powerful GUI for managing patients, tests, and reports, while maintaining a robust backend for device communication (HL7).
+**YourLIS** (HealthMesh) is an enterprise-grade Laboratory Information System (LIS) built with Python, Flet, and FastAPI. It streamlines clinical laboratory operations with an intuitive desktop user interface for managing patients, test orders, and medical reports, while maintaining a hardened, high-throughput backend for medical device ingestion (HL7 / MLLP).
+
+---
 
 ## ✨ Features
 
-- **📊 Dashboard**: Real-time overview of system status and connected devices.
-- **📁 Patient Management**: Comprehensive tools for patient registration and search.
-- **🔬 CBC Reports**: Specialized handling for Complete Blood Count (CBC) results and reporting.
-- **📤 Send Out Management**: Track and manage tests sent to external laboratories.
-- **📡 Device Integration**: Live HL7 data stream monitoring and communication.
-- **⚙️ Configurable**: Flexible settings for server, database, and appearance.
-- **🛡️ Secure**: Built-in authentication and role management.
+- **📊 Dashboard**: Real-time operational overview of clinical activity, daily test counts, and connected laboratory instruments.
+- **📁 Patient Management**: Comprehensive patient registration, search, and medical history tracking.
+- **🔬 CBC Reports**: Specialized hematology handling for Complete Blood Count (CBC) parameters, differential flags, and printable PDF reports.
+- **📤 Send-Out Management**: Tracking and financial ledger for tests dispatched to external reference laboratories.
+- **📡 Device Stream & MLLP Server**: Real-time HL7 analyzer ingestion stream with bounded incremental UI rendering and search debounce.
+- **🛡️ Clinical Security & HIPAA Hardening**:
+  - Automated PHI/PII log redaction filter preserving `MSH-10` audit traceability.
+  - Decoupled Fernet encryption key storage supporting `HEALTHMESH_SECRET_KEY`.
+  - Atomic configuration persistence with lock protection.
+  - Centralized PyODBC connection pool with native pooling and health recycling.
+- **⚙️ Multi-Tier Decoupling**: Complete service boundary isolation separating the Flet presentation layer from the database through FastAPI endpoints.
+
+---
+
+## 🏛️ Architecture Highlights
+
+```
++---------------------+       HTTP (REST)       +---------------------+
+|      Flet GUI       |  ====================>  |   FastAPI Service   |
+| (Incremental Stream)|                         |   (/api/v1/...)     |
++---------------------+                         +----------+----------+
+                                                           |
+                                                ConnectionPool (SELECT 1)
+                                                           v
++---------------------+                         +---------------------+
+|    Lab Analyzers    |                         |  MS SQL Server DB   |
+| (Genrui CBC, etc.)  |                         | (Schema Immutability|
++----------+----------+                         +----------+----------+
+           |                                               ^
+           | TCP / MLLP (0x0B ... 0x1C 0x0D)               | Thread Offload
+           v                                               |
++---------------------+    Async Ingestion / NAK    +------+--------------+
+|   Async TCP Server  |  ========================>  |    HL7 Responder    |
+| (5MB Buffer Ceiling)|                             |  (ACK/ORR Generation)
++---------------------+                             +---------------------+
+```
+
+1. **Schema Immutability**: All SQL mapping dictionaries are deeply copied, ensuring partial incoming HL7 payloads never strip global schema definitions.
+2. **Non-Blocking Ingestion**: Synchronous database queries and HL7 processing are offloaded to worker threads via `asyncio.to_thread()`, keeping TCP ingestion responsive during peak analyzer bursts.
+3. **Resilient MLLP Framing**: Standard `\x0b` (VT) and `\x1c\x0d` (FS CR) frame boundary reassembly protects against TCP fragmentation and packet coalescing, bounded by a 5MB memory guard.
+4. **Resilient Error Recovery**: Analyzers receive standard HL7 NAK frames (`MSA|AE` or `MSA|AR`) upon processing errors, maintaining persistent socket connections without disconnecting instruments.
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- **Database**: SQL Server (or compatible database schema configured in `setting/config.json`)
+- **Database**: Microsoft SQL Server (or compatible instance configured in `setting/config.json`)
 - **Package Manager**: [uv](https://docs.astral.sh/uv/) (recommended) or Python 3.10+
 
 ---
 
 ### Quick Start with `uv` (Recommended)
 
-`uv` handles Python runtimes, virtual environments, and dependencies automatically without path corruption or slow installs.
+`uv` automatically manages Python runtimes, virtual environments, and dependencies.
 
 #### 1. Clone the repository
 ```bash
@@ -32,7 +68,7 @@ git clone https://github.com/moazmaksod/YourLis.git
 cd YourLis
 ```
 
-#### 2. Install `uv` (one-time setup if not already installed)
+#### 2. Install `uv` (if not already installed)
 - **Windows (PowerShell)**:
   ```powershell
   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
@@ -41,28 +77,21 @@ cd YourLis
   ```bash
   curl -LsSf https://astral.sh/uv/install.sh | sh
   ```
-- **Via pip** (if you already have Python):
-  ```bash
-  pip install uv
-  ```
 
 #### 3. Run the Application
-You don't even need to manually create or activate a virtual environment. Simply execute:
 ```bash
 uv run main.py
 ```
 > **What happens automatically?**
-> - `uv` downloads and pins the appropriate Python version if missing.
-> - Creates a local `.venv` inside the project folder.
+> - `uv` provisions the pinned Python virtual environment.
 > - Installs all dependencies in seconds.
-> - Starts the full system (GUI, API, and HL7 Device Server).
+> - Starts the FastAPI service, MLLP TCP Server, and Flet desktop GUI.
 
-#### 4. (Optional) Sync or Activate Environment Manually
-If you want to sync the virtual environment for your IDE (such as VS Code or PyCharm):
+#### 4. (Optional) Sync or Activate Virtual Environment
 ```bash
 uv sync
 ```
-To activate the virtual environment manually in your shell:
+To activate the virtual environment manually:
 - **Windows (PowerShell)**:
   ```powershell
   .venv\Scripts\Activate.ps1
@@ -80,70 +109,73 @@ To activate the virtual environment manually in your shell:
 
 ### Alternative: Traditional Setup with `venv` & `pip`
 
-If you prefer standard Python tools without `uv`:
+```bash
+python -m venv .venv
 
-1. **Create and activate a virtual environment**:
-   ```bash
-   python -m venv .venv
-   
-   # Windows:
-   .venv\Scripts\activate
-   
-   # macOS/Linux:
-   source .venv/bin/activate
-   ```
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+source .venv/bin/activate
 
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Run the application**:
-   ```bash
-   python main.py
-   ```
+pip install -r requirements.txt
+python main.py
+```
 
 ---
 
-## 🧪 Testing & Building
+## 🔐 Security & Secret Key Configuration
 
-### Running Tests
-Using `uv`:
+To isolate sensitive credentials in production, configure the Fernet encryption key via environment variable:
+
 ```bash
-uv run pytest
-```
-Or with an activated virtual environment:
-```bash
-pytest
+# Windows PowerShell
+$env:HEALTHMESH_SECRET_KEY="<base64-encoded-fernet-key>"
+
+# Linux / macOS
+export HEALTHMESH_SECRET_KEY="<base64-encoded-fernet-key>"
 ```
 
-### Building Executable (PyInstaller)
-To package the application into a standalone executable:
-```bash
-uv run python build.py
-```
-The output executable will be generated inside the `dist/` directory.
+If not provided, the system will securely generate and persist a protected key file isolated from configuration data.
 
 ---
 
-## 📖 Documentation
+## 🧪 Testing & Verification
 
-For more detailed information, please refer to:
-- [**User Guide**](User_Guide.md) - How to use the application.
-- [**Developer Guide**](Developer_Guide.md) - Technical details and architecture.
+The test suite includes 86 automated unit, contract, and end-to-end integration tests covering database pooling, MLLP socket pipelines, PHI redaction, and UI stream performance.
+
+```bash
+# Run tests with uv
+uv run pytest -v
+
+# Or with activated virtual environment
+pytest -v
+```
+
+---
+
+## 📖 Documentation & Guidelines
+
+- [**Developer Guide**](Developer_Guide.md) - Deep architectural breakdown, API endpoints, and subsystem documentation.
+- [**User Guide**](User_Guide.md) - End-user manual for laboratory technicians.
+- [**Architectural Invariants & Rules**](.antigravity/rules.md) - Mandatory non-negotiable coding guardrails.
+
+---
 
 ## 🛠️ Tech Stack
 
 - **GUI**: [Flet](https://flet.dev/) (Flutter for Python)
-- **API**: [FastAPI](https://fastapi.tiangolo.com/)
-- **Server**: Asynchronous TCP Server (`asyncio`)
-- **Protocol**: HL7 (Health Level Seven)
-- **Database**: SQL Server (via `pyodbc`)
-- **Environment & Tooling**: [uv](https://docs.astral.sh/uv/)
+- **API**: [FastAPI](https://fastapi.tiangolo.com/) (Uvicorn)
+- **Device Ingestion**: Asynchronous TCP Server (`asyncio`, MLLP standard)
+- **Protocol**: HL7 v2.3.1 (Health Level Seven)
+- **Database**: Microsoft SQL Server via `pyodbc` (with native pooling)
+- **Security**: Cryptography (Fernet AES-CBC), PHI Redacting Logging Filter
+- **Tooling**: [uv](https://docs.astral.sh/uv/), `pytest`
+
+---
 
 ## 🤝 Contributing
 
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+Please ensure all changes comply with [`.antigravity/rules.md`](.antigravity/rules.md) and maintain 100% test coverage before submitting pull requests.
 
 ## 📄 License
 
