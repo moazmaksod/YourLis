@@ -7,8 +7,8 @@ GO
 CREATE PROCEDURE dbo.GetSendOutSamples
     @PatientID NVARCHAR(50) = NULL,
     @PatientName NVARCHAR(100) = NULL,
-    @StartDate DATE = NULL,
-    @EndDate DATE = NULL,
+    @StartDate DATETIME = NULL,
+    @EndDate DATETIME = NULL,
     @DestinationLab NVARCHAR(100) = NULL,
     @Status NVARCHAR(50) = NULL
 AS
@@ -38,8 +38,8 @@ BEGIN
         pt.sentout = 1  -- Filter for only tests intended to be sent out
         AND (@PatientID IS NULL OR pt.patientid LIKE '%' + @PatientID + '%')
         AND (@PatientName IS NULL OR p.patientnamear LIKE '%' + @PatientName + '%')
-        AND (@StartDate IS NULL OR CONVERT(date, pt.requestdate) >= @StartDate)
-        AND (@EndDate IS NULL OR CONVERT(date, pt.requestdate) <= @EndDate)
+        AND (@StartDate IS NULL OR pt.requestdate >= @StartDate)
+        AND (@EndDate IS NULL OR pt.requestdate < DATEADD(day, 1, @EndDate))
         AND (@DestinationLab IS NULL OR pt.otherlabname LIKE '%' + @DestinationLab + '%')
         AND (@Status IS NULL OR 
             (@Status = 'Sent' AND sol.SentDate IS NOT NULL) OR 

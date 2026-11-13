@@ -1,5 +1,6 @@
 
 import os
+import re
 import pyodbc
 from database.sqlconnection import get_db_connection, SOURCE
 from log.logger import log_info, log_error
@@ -63,8 +64,8 @@ def setup_database_schema():
 
         for item in sql_data:
             try:
-                # Split the script into individual commands, separated by 'GO'
-                sql_commands = item['content'].split('GO')
+                # Split the script into individual commands, separated by 'GO' on its own line
+                sql_commands = re.split(r'^\s*GO\s*$', item['content'], flags=re.MULTILINE | re.IGNORECASE)
                 for command in sql_commands:
                     if command.strip():
                         cursor.execute(command)

@@ -8,10 +8,11 @@ SET QUOTED_IDENTIFIER ON
 GO
 
 
-DROP PROCEDURE IF EXISTS [dbo].[GetPatientCBCResult];
+IF OBJECT_ID('dbo.GetPatientCBCResult', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.GetPatientCBCResult;
 GO
 
-CREATE OR ALTER PROCEDURE [dbo].[GetPatientCBCResult]
+CREATE PROCEDURE [dbo].[GetPatientCBCResult]
     @PATIENT_ID VARCHAR(13)  -- Patient ID is required
 AS
 BEGIN

@@ -1,3 +1,5 @@
+import copy
+import asyncio
 from database.sqlqueriesExe import querie_exe
 from hl7msghandel.hl7fitsql import update_hl7_dictionary
 from database.sqlconnection import get_db_connection
@@ -29,23 +31,27 @@ def data_insert_for(
 
     table_name = db_schema["TABLE_NAME"]
 
-    column_name = db_schema["COLUMN_NAME"]
+    # Protect global schema dictionary from in-place mutation
+    column_name = copy.deepcopy(db_schema["COLUMN_NAME"])
 
     hl7_column = hl7_dictionary["COLUMN_NAME"]
 
-    db_schema_delete_extra_keys = []
-
-    for key in column_name.keys():
-        if key not in (hl7_column.keys()):
-            db_schema_delete_extra_keys.append(key)
-    for key in db_schema_delete_extra_keys:
-        del column_name[key]
+    # Filter to only the columns present in the incoming hl7 message
+    column_name = {
+        key: col_db_name
+        for key, col_db_name in column_name.items()
+        if key in hl7_column
+    }
 
     # select the values holder from db schema for column
-    values_holder = tuple(hl7_column.keys())
+    values_holder = tuple(column_name.keys())
 
-    # select the values from hl7 message ans assign to the values holder for column
-    values = tuple(str(hl7_column[value]) for value in values_holder)
+    # select the values from hl7 message and assign to the values holder (preserve None as SQL NULL)
+    values = tuple(
+        None if hl7_column[value] is None or hl7_column[value] == "None"
+        else str(hl7_column[value])
+        for value in values_holder
+    )
 
     columns = ", ".join(column_name.values())
     placeholders = ", ".join(["?" for _ in column_name])
@@ -74,47 +80,47 @@ def data_update_for(
     )
 
     table_name = db_schema["TABLE_NAME"]
-    column_name = db_schema["COLUMN_NAME"]
-    condition = db_schema["CONDITION"]
+
+    # Protect global schema dictionary from in-place mutation
+    column_name = copy.deepcopy(db_schema["COLUMN_NAME"])
+    condition = copy.deepcopy(db_schema["CONDITION"])
 
     hl7_column = hl7_dictionary["COLUMN_NAME"]
 
-    db_schema_delete_extra_keys = []
-
-    for key in column_name.keys():
-        if key not in (hl7_column.keys()):
-            db_schema_delete_extra_keys.append(key)
-
-        # if key in (condition.keys()):
-        #     db_schema_delete_extra_keys.append(key)
-        #     # delete where state volumn from db schema nad hl7 becouse we don't need to update it allready exists
-        #     del hl7_column[key]
-
-    for key in db_schema_delete_extra_keys:
-        # delete the extra data that didn't have value
-        del column_name[key]
+    # Filter to only the columns present in the incoming hl7 message
+    column_name = {
+        key: col_db_name
+        for key, col_db_name in column_name.items()
+        if key in hl7_column
+    }
 
     # select the values holder from db schema for column
-    column_values_holder = tuple(hl7_column.keys())
-    # select the values from hl7 message ans assign to the values holder for column
-    colmun_values = (str(hl7_column[value]) for value in column_values_holder)
+    column_values_holder = tuple(column_name.keys())
+    # select the values from hl7 message and assign to the values holder (preserve None as SQL NULL)
+    colmun_values = tuple(
+        None if hl7_column[value] is None or hl7_column[value] == "None"
+        else str(hl7_column[value])
+        for value in column_values_holder
+    )
 
     hl7_msg_conditions = hl7_dictionary["CONDITION"]
     # select the values holder from db schema for condition
-    condition_values_holder = condition.keys()
-    # select the values from hl7 message ans assign to the values holder for condition
-    condition_values = (
-        str(hl7_msg_conditions[value]) for value in condition_values_holder
+    condition_values_holder = tuple(condition.keys())
+    # select the values from hl7 message and assign to the values holder
+    condition_values = tuple(
+        None if hl7_msg_conditions[value] is None or hl7_msg_conditions[value] == "None"
+        else str(hl7_msg_conditions[value])
+        for value in condition_values_holder
     )
 
-    values = tuple(colmun_values) + tuple(condition_values)
+    values = colmun_values + condition_values
 
-    set_clause = ",".join([f"{value} = ?" for value in column_name.values()])
+    set_clause = ", ".join([f"{value} = ?" for value in column_name.values()])
 
-    condition_strings = [f"{value} = ? " for key, value in condition.items()]
-    condition = "" + "and ".join(condition_strings)
+    condition_strings = [f"{value} = ?" for key, value in condition.items()]
+    condition_clause = " and ".join(condition_strings)
 
-    sql = f"UPDATE [dbo].{table_name} SET {set_clause} WHERE {condition};"
+    sql = f"UPDATE [dbo].{table_name} SET {set_clause} WHERE {condition_clause};"
 
     data = (sql, values)
 
@@ -156,8 +162,12 @@ def data_select_for(
 
     # select the values holder from db schema
     values_holder = tuple(condition.keys())
-    # select the values from hl7 message ans assign to the values holder
-    values = tuple(str(hl7_column[value]) for value in values_holder)
+    # select the values from hl7 message and assign to the values holder (preserve None as SQL NULL)
+    values = tuple(
+        None if hl7_column[value] is None or hl7_column[value] == "None"
+        else str(hl7_column[value])
+        for value in values_holder
+    )
 
     set_clause = ", ".join([f"{value}" for value in column_name.values()])
 
@@ -199,8 +209,12 @@ def data_delete_for(
     # select the values holder from db schema
     values_holder = tuple(condition.keys())
 
-    # select the values from hl7 message ans assign to the values holder
-    values = tuple(str(hl7_column[value]) for value in values_holder)
+    # select the values from hl7 message and assign to the values holder (preserve None as SQL NULL)
+    values = tuple(
+        None if hl7_column[value] is None or hl7_column[value] == "None"
+        else str(hl7_column[value])
+        for value in values_holder
+    )
 
     condition_strings = [f"{value} = ?" for key, value in condition.items()]
 
@@ -213,9 +227,9 @@ def data_delete_for(
     return querie_exe(data)
 
 
-async def exec_procedure_for(db_schema: dict, values: dict):
+def exec_procedure_sync(db_schema: dict, values: dict):
     """
-    Executes a stored procedure with the provided parameters.
+    Synchronously executes a stored procedure with the provided parameters.
 
     Args:
         db_schema (dict): A dictionary containing the procedure name and parameters.
@@ -224,35 +238,22 @@ async def exec_procedure_for(db_schema: dict, values: dict):
     Returns:
         The result of the stored procedure execution.
     """
-
-    # Extract the procedure name and parameters from the schema
     procedure_name = db_schema["PROCEDURE_NAME"]
     parameters = db_schema["PARAMETERS"]
 
-    # Construct the parameter string for the EXEC query
     parameters_string = ", ".join([f"@{param} = ?" for param in parameters])
-
-    # Construct the SQL query
     sql = f"EXEC {procedure_name} {parameters_string}"
 
-    # Prepare the parameter values in the correct order
     value = [values.get(param) for param in parameters]
-
-    # Convert empty strings to None (NULL in SQL)
     value = tuple(None if v == "" else v for v in value)
 
     data = (sql, value)
-
     return querie_exe(data)
 
 
-async def exec_procedure_no_return(db_schema: dict, values: dict):
+def exec_procedure_no_return_sync(db_schema: dict, values: dict):
     """
-    Executes a stored procedure that does not return a result set (e.g., an UPDATE or INSERT).
-
-    Args:
-        db_schema (dict): A dictionary containing the procedure name and parameters.
-        values (dict): A dictionary of parameter values.
+    Synchronously executes a stored procedure that does not return a result set.
     """
     procedure_name = db_schema["PROCEDURE_NAME"]
     parameters = db_schema["PARAMETERS"]
@@ -264,9 +265,19 @@ async def exec_procedure_no_return(db_schema: dict, values: dict):
     value_tuple = tuple(None if v == "" else v for v in value_list)
 
     data = (sql, value_tuple)
-
-    # Use querie_exe but we don't need the return value
-    # Assuming querie_exe can handle operations that don't return rows
     querie_exe(data, expect_results=False)
-
     return None
+
+
+async def exec_procedure_for(db_schema: dict, values: dict):
+    """
+    Asynchronously executes a stored procedure on a thread pool to avoid blocking the GUI event loop.
+    """
+    return await asyncio.to_thread(exec_procedure_sync, db_schema, values)
+
+
+async def exec_procedure_no_return(db_schema: dict, values: dict):
+    """
+    Asynchronously executes a non-returning stored procedure on a thread pool.
+    """
+    return await asyncio.to_thread(exec_procedure_no_return_sync, db_schema, values)

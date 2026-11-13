@@ -7,7 +7,11 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-CREATE OR ALTER PROCEDURE [dbo].[GetPatientInfo]
+IF OBJECT_ID('dbo.GetPatientInfo', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.GetPatientInfo;
+GO
+
+CREATE PROCEDURE [dbo].[GetPatientInfo]
     @PATIENT_ID VARCHAR(13) = NULL,
     @PATIENT_NAME NVARCHAR(100) = NULL,
     @START_DATE SMALLDATETIME = NULL, -- Parameter for start date
