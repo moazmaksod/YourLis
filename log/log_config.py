@@ -21,10 +21,13 @@ class PHIRedactingFilter(logging.Filter):
     # Regex to mask PWD=... in connection strings or config
     PASSWORD_PATTERN = re.compile(r'((?:PWD|Password)\s*=\s*)([^;]+)', re.IGNORECASE)
     PASSWORD_JSON_PATTERN = re.compile(r'("DB_PASSWORD":\s*")([^"]+)', re.IGNORECASE)
+    TOKEN_PATTERN = re.compile(r'((?:token|api_token|access_token)\s*=\s*)([^&\s"\']+)', re.IGNORECASE)
+    BEARER_PATTERN = re.compile(r'(Bearer\s+)([A-Za-z0-9_\-\.]{8,})', re.IGNORECASE)
+    URL_CREDENTIAL_PATTERN = re.compile(r'(://[^:]+:)([^@]+)(@)', re.IGNORECASE)
 
     # Regex to sanitize PID segments in raw HL7 strings:
-    # PID|SetID|PatientIDExt|PatientIDInt|AltID|PatientName|...
-    PID_PATTERN = re.compile(r'(PID\|[^|\r\n]*\|[^|\r\n]*\|)([^|\r\n]*)(\|[^|\r\n]*\|)([^|\r\n]*)')
+    # Matches any PID segment starting at line start, newline, or separator
+    PID_SEGMENT_PATTERN = re.compile(r'(^|[\r\n]|[^A-Za-z0-9_])(PID\|[^\r\n]*)')
 
     # Regex to sanitize SQL Server duplicate key error strings embedding clinical identifiers
     # Example: "Cannot insert duplicate key in object 'dbo.Patient' with value (12345, DOE JOHN)."
@@ -44,6 +47,9 @@ class PHIRedactingFilter(logging.Filter):
         elif hasattr(record, "message") and isinstance(record.message, str):
             record.message = self.redact_text(record.message)
 
+        if record.exc_text:
+            record.exc_text = self.redact_text(record.exc_text)
+
         return True
 
     @classmethod
@@ -51,22 +57,26 @@ class PHIRedactingFilter(logging.Filter):
         if not text:
             return text
 
-        # 1. Mask passwords
+        # 1. Mask passwords and tokens
         text = cls.PASSWORD_PATTERN.sub(r'\1********', text)
         text = cls.PASSWORD_JSON_PATTERN.sub(r'\1********', text)
+        text = cls.TOKEN_PATTERN.sub(r'\1********', text)
+        text = cls.BEARER_PATTERN.sub(r'\1********', text)
+        text = cls.URL_CREDENTIAL_PATTERN.sub(r'\1********\3', text)
 
-        # 2. Redact PID segment identifiers (Patient ID & Patient Name)
+        # 2. Redact PID segment identifiers (IDs, Name, DOB, Address, Phone, SSN)
         def _redact_pid(match):
-            prefix = match.group(1)      # 'PID|SetID|PatientIDExt|'
-            pid_int = match.group(2)     # Patient ID Internal
-            mid = match.group(3)         # '|AltID|'
-            pname = match.group(4)       # Patient Name
+            prefix = match.group(1)
+            raw_pid = match.group(2)
+            fields = raw_pid.split("|")
+            # In HL7 PID: 2=ExtID, 3=IntID, 4=AltID, 5=Name, 6=MotherMaiden, 7=DOB, 11=Address, 13=HomePhone, 14=WorkPhone, 18=AccountNum, 19=SSN
+            sensitive_indices = {2, 3, 4, 5, 6, 7, 11, 13, 14, 18, 19}
+            for idx in sensitive_indices:
+                if idx < len(fields) and fields[idx]:
+                    fields[idx] = cls.mask_string(fields[idx])
+            return prefix + "|".join(fields)
 
-            redacted_id = cls.mask_string(pid_int) if pid_int else ""
-            redacted_name = cls.mask_string(pname) if pname else ""
-            return f"{prefix}{redacted_id}{mid}{redacted_name}"
-
-        text = cls.PID_PATTERN.sub(_redact_pid, text)
+        text = cls.PID_SEGMENT_PATTERN.sub(_redact_pid, text)
 
         # 3. Redact SQL duplicate key exception values
         def _redact_sql_duplicate(match):
@@ -90,6 +100,20 @@ class PHIRedactingFilter(logging.Filter):
         return val[0] + "*" * (len(val) - 2) + val[-1]
 
 
+class PHIRedactingFormatter(logging.Formatter):
+    """
+    Custom formatter ensuring all formatted messages and exception tracebacks (exc_info)
+    are strictly scrubbed of PHI, PII, passwords, and tokens.
+    """
+    def format(self, record: logging.LogRecord) -> str:
+        s = super().format(record)
+        return PHIRedactingFilter.redact_text(s)
+
+    def formatException(self, ei) -> str:
+        s = super().formatException(ei)
+        return PHIRedactingFilter.redact_text(s)
+
+
 def configure_logging():
     """
     Configures logging with file rotation, console output, and PHI redaction.
@@ -110,8 +134,8 @@ def configure_logging():
 
     logger.setLevel(logging.DEBUG)
 
-    # Formatter for log messages (with safe source display)
-    formatter = logging.Formatter(
+    # Formatter for log messages (with safe source display and PHI scrubbed tracebacks)
+    formatter = PHIRedactingFormatter(
         "%(asctime)s - %(name)s - %(levelname)s - [%(source)s] - %(message)s"
     )
 

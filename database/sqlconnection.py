@@ -6,6 +6,8 @@ from contextlib import contextmanager
 from log.logger import log_info, log_error, log_warning
 from setting import config
 
+import atexit
+
 SOURCE = "Database"
 
 # Enable ODBC-level connection pooling in pyodbc
@@ -64,7 +66,10 @@ class ConnectionPool:
         self.max_connections = max_connections
         self.timeout = timeout
         self._pool = queue.Queue(maxsize=max_connections)
+        self._semaphore = threading.BoundedSemaphore(max_connections)
         self._lock = threading.Lock()
+        self._in_pool = set()
+        self._checked_out = set()
         self._active_count = 0
 
     def _create_raw_connection(self):
@@ -74,11 +79,11 @@ class ConnectionPool:
 
     def _is_alive(self, conn):
         """Fast pre-ping check to verify the connection is alive and clean of uncommitted transactions."""
+        cursor = None
         try:
             cursor = conn.cursor()
             cursor.execute("SELECT 1")
             cursor.fetchone()
-            cursor.close()
             try:
                 conn.rollback()
             except Exception:
@@ -86,13 +91,30 @@ class ConnectionPool:
             return True
         except Exception:
             return False
+        finally:
+            if cursor is not None:
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
 
     def get_connection(self):
         """Acquires a healthy connection from the pool, creating one if needed."""
+        # Acquire semaphore slot to bound maximum physical connections
+        acquired = self._semaphore.acquire(timeout=self.timeout)
+        if not acquired:
+            raise ConnectionError(
+                f"Database connection pool exhausted ({self.max_connections} active connections). Timeout after {self.timeout}s."
+            )
+
         while not self._pool.empty():
             try:
                 conn = self._pool.get_nowait()
+                with self._lock:
+                    self._in_pool.discard(id(conn))
                 if self._is_alive(conn):
+                    with self._lock:
+                        self._checked_out.add(id(conn))
                     return conn
                 else:
                     self._close_conn(conn)
@@ -106,11 +128,20 @@ class ConnectionPool:
             conn = self._create_raw_connection()
             with self._lock:
                 self._active_count += 1
+                self._checked_out.add(id(conn))
             log_info("Database connection acquired.", source=SOURCE)
             return conn
         except ValueError:
+            try:
+                self._semaphore.release()
+            except ValueError:
+                pass
             raise
         except Exception as e:
+            try:
+                self._semaphore.release()
+            except ValueError:
+                pass
             log_error(f"Failed to connect to database: {e}", source=SOURCE)
             raise ConnectionError(f"Failed to connect to database: {e}")
 
@@ -118,6 +149,18 @@ class ConnectionPool:
         """Returns a connection to the pool after rolling back open transactions, or discards it if broken."""
         if conn is None:
             return
+
+        with self._lock:
+            # Prevent double-release aliasing if connection is already released back into pool
+            if id(conn) in self._in_pool:
+                return
+            self._checked_out.discard(id(conn))
+
+        try:
+            self._semaphore.release()
+        except ValueError:
+            pass
+
         if not discard:
             try:
                 conn.rollback()
@@ -132,6 +175,8 @@ class ConnectionPool:
 
         try:
             self._pool.put_nowait(conn)
+            with self._lock:
+                self._in_pool.add(id(conn))
         except queue.Full:
             self._close_conn(conn)
             with self._lock:
@@ -153,15 +198,27 @@ class ConnectionPool:
                 break
         with self._lock:
             self._active_count = 0
+            self._checked_out.clear()
+            self._in_pool.clear()
 
 
 # Global singleton connection pool
 _global_pool = ConnectionPool()
+atexit.register(_global_pool.close_all)
 
 
 def get_connection_pool() -> ConnectionPool:
     """Returns the singleton ConnectionPool instance."""
     return _global_pool
+
+
+def _get_discard_error_classes():
+    classes = [ConnectionError]
+    for name in ("OperationalError", "DatabaseError", "InterfaceError"):
+        err_cls = getattr(pyodbc, name, None)
+        if isinstance(err_cls, type) and issubclass(err_cls, BaseException):
+            classes.append(err_cls)
+    return tuple(classes)
 
 
 @contextmanager
@@ -176,7 +233,7 @@ def get_db_connection_context():
     try:
         conn = _global_pool.get_connection()
         yield conn
-    except (pyodbc.OperationalError, pyodbc.DatabaseError, ConnectionError):
+    except _get_discard_error_classes():
         discard = True
         raise
     finally:

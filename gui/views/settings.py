@@ -1,3 +1,4 @@
+import asyncio
 import flet as ft
 from setting.config import get_config, save_config, get_available_sql_drivers
 from gui.api_methods import test_db_connection_api as test_db_connection
@@ -6,13 +7,23 @@ temp_value = "change"
 PASSWORD_PLACEHOLDER = "********"
 
 
+def _show_snack(page: ft.Page, message: str, bgcolor: str = None):
+    snack = ft.SnackBar(ft.Text(message), bgcolor=bgcolor)
+    if hasattr(page, "open"):
+        page.open(snack)
+    else:
+        page.snack_bar = snack
+        page.snack_bar.open = True
+        page.update()
+
+
 def settings_view(page: ft.Page):
     """
     Settings view content with collapsible sections and scrollable layout.
     """
     cfg = get_config()  # Load configuration from file
 
-    def save_settings(e):
+    async def save_settings(e):
         # Save settings to the configuration file
         setting_to_save = {
             "CONFIG_URL": config_url.value,
@@ -40,23 +51,18 @@ def settings_view(page: ft.Page):
         else:
             setting_to_save.update({"DB_PASSWORD": cfg.get("DB_PASSWORD", "")})
 
-        # Validate DB Connection before saving
+        # Validate DB Connection asynchronously before saving to avoid freezing UI
         try:
-            test_db_connection(setting_to_save)
-        except Exception as e:
-            # Show error and abort save
-            page.snack_bar = ft.SnackBar(
-                ft.Text(f"Failed to connect to Database: {e}"), 
-                bgcolor="red"
-            )
-            page.snack_bar.open = True
-            page.update()
+            is_valid = await asyncio.to_thread(test_db_connection, setting_to_save)
+            if not is_valid:
+                _show_snack(page, "Failed to connect to Database. Please verify settings.", bgcolor="red")
+                return
+        except Exception as ex:
+            _show_snack(page, f"Failed to connect to Database: {ex}", bgcolor="red")
             return
 
-        save_config(setting_to_save)
-        page.snack_bar = ft.SnackBar(ft.Text("Settings saved successfully!"), bgcolor="green")
-        page.snack_bar.open = True
-        page.update()
+        await asyncio.to_thread(save_config, setting_to_save)
+        _show_snack(page, "Settings saved successfully!", bgcolor="green")
 
     def theme_change(e):
         if dark_mode.value:

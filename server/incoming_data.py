@@ -12,27 +12,23 @@ def _process_incoming_data_sync(message):
     Synchronously parses HL7 incoming frame and generates response.
     Designed to be executed in a worker thread via asyncio.to_thread.
     """
-    try:
-        msg = parse_hl7_message(message, "Incomming")
-        handel_response = generate_response_message(msg)
-        if not handel_response:
-            return None
-
-        # Support both 'response' and legacy 'respose' typo
-        response = handel_response.get("response")
-        if response is None:
-            response = handel_response.get("respose")
-
-        sender_name_ver = handel_response.get("sender")
-
-        if response is not None:
-            parse_hl7_message(response, "Response")
-            return response, sender_name_ver
-
+    msg = parse_hl7_message(message, "Incomming")
+    handel_response = generate_response_message(msg)
+    if not handel_response:
         return None
-    except Exception as e:
-        log_error(f"Error processing incoming data: {e}", source=SOURCE)
-        return None
+
+    # Support both 'response' and legacy 'respose' typo
+    response = handel_response.get("response")
+    if response is None:
+        response = handel_response.get("respose")
+
+    sender_name_ver = handel_response.get("sender")
+
+    if response is not None:
+        parse_hl7_message(response, "Response")
+        return response, sender_name_ver
+
+    return None, sender_name_ver
 
 
 async def handle_incoming_data(message, timeout: float = 10.0):
@@ -58,4 +54,4 @@ async def handle_incoming_data(message, timeout: float = 10.0):
         return None
     except Exception as e:
         log_error(f"Error handling incoming data: {e}", source=SOURCE)
-        return None
+        raise

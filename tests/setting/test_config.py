@@ -144,3 +144,33 @@ def test_get_api_token_from_env_or_generated(monkeypatch):
     token = config.get_api_token()
     assert token == "custom_secret_api_token_123"
 
+
+def test_save_config_boolean_string_conversion(tmp_path, mocker, mock_logger):
+    """
+    Verify string 'False', '0', 'true' are cast to proper bools instead of truthy bool('False').
+    """
+    cfg_file = str(tmp_path / "config.json")
+    key_file = str(tmp_path / "key.key")
+    lock_file = str(tmp_path / "config.lock")
+
+    key = config.generate_secure_key()
+    with open(key_file, "wb") as f:
+        f.write(key)
+
+    mocker.patch.dict(os.environ, {
+        "HEALTHMESH_CONFIG_PATH": cfg_file,
+        "HEALTHMESH_KEY_PATH": key_file,
+        "HEALTHMESH_LOCK_PATH": lock_file,
+    })
+
+    # Save TEST_FINISH_CODE as "False" string
+    config.save_config({"TEST_FINISH_CODE": "False"}, config_url=cfg_file, key_url=key_file)
+    loaded = config.get_config(cfg_file, key_url=key_file)
+    assert loaded["TEST_FINISH_CODE"] is False
+
+    # Save TEST_FINISH_CODE as "True" string
+    config.save_config({"TEST_FINISH_CODE": "True"}, config_url=cfg_file, key_url=key_file)
+    loaded = config.get_config(cfg_file, key_url=key_file)
+    assert loaded["TEST_FINISH_CODE"] is True
+
+

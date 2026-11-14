@@ -3,6 +3,7 @@ import datetime
 import math
 import asyncio
 from log.logger import log_info, log_error
+from gui.components import show_snack_bar
 from gui.api_methods import (
     fetch_send_out_api,
     fetch_destination_labs_api,
@@ -159,8 +160,7 @@ def create_send_out_row(page, sample):
                 new_price = float(price_field.value)
                 new_paid = float(paid_field.value)
             except ValueError:
-                page.snack_bar = ft.SnackBar(ft.Text("Invalid number format"), open=True)
-                page.update()
+                show_snack_bar(page, "Invalid number format")
                 return
 
             try:
@@ -449,7 +449,7 @@ def send_out_view(page: ft.Page):
 
         except Exception as ex:
             log_error(f"Error in send_out search_handler: {ex}")
-            page.snack_bar = ft.SnackBar(ft.Text(f"Error: {ex}"), open=True)
+            show_snack_bar(page, f"Error: {ex}")
 
         finally:
             page.splash = None

@@ -59,9 +59,7 @@ def server_control(page: ft.Page):
         
         message = result.get("message", "")
         if "Failed" in message or "Exception" in message:
-             page.snack_bar = ft.SnackBar(ft.Text(message), bgcolor="red")
-             page.snack_bar.open = True
-             page.update()
+             show_snack_bar(page, message, bgcolor="red")
 
         await status_updater.manual_status_refresh()  # Refresh status immediately after toggle
 
@@ -228,28 +226,52 @@ def db_conn_fail_dialog(page: ft.Page, on_settings=None):
 
 def show_dialog(page: ft.Page, dialog: ft.AlertDialog):
     """Safely opens a modal or alert dialog across all Flet versions without leaving orphaned modal barriers."""
-    if hasattr(page, "open"):
+    if hasattr(page, "open") and callable(getattr(page, "open")):
         page.open(dialog)
     else:
-        if dialog not in page.overlay:
-            page.overlay.append(dialog)
+        if hasattr(page, "overlay"):
+            if dialog not in page.overlay:
+                page.overlay.append(dialog)
         dialog.open = True
-        page.update()
+        if hasattr(page, "update") and callable(getattr(page, "update")):
+            page.update()
 
 
 def dismiss_dialog(page: ft.Page, dialog: ft.AlertDialog):
-    """Safely closes an alert dialog across all Flet versions without tearing down the widget tree during transition."""
+    """Safely closes an alert dialog across all Flet versions without leaving orphaned modal barriers."""
     dialog.open = False
     if hasattr(page, "close") and callable(getattr(page, "close")):
         try:
             page.close(dialog)
         except Exception:
             pass
+    elif hasattr(page, "overlay") and dialog in page.overlay:
+        # Fallback only when page.close is unavailable (legacy mock / pre-0.23 Flet)
+        try:
+            page.overlay.remove(dialog)
+        except Exception:
+            pass
+
     if hasattr(page, "update") and callable(getattr(page, "update")):
         try:
             page.update()
         except Exception:
             pass
+
+
+def show_snack_bar(page: ft.Page, message: str, bgcolor: str = None):
+    """Safely displays a SnackBar across Flet versions."""
+    snack = ft.SnackBar(ft.Text(message), open=True)
+    if bgcolor:
+        snack.bgcolor = bgcolor
+    if hasattr(page, "open") and callable(getattr(page, "open")):
+        page.open(snack)
+    else:
+        page.snack_bar = snack
+        page.snack_bar.open = True
+        page.update()
+
+
 
 
 

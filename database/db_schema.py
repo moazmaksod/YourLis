@@ -92,7 +92,14 @@ def setup_database_schema():
     
     finally:
         if connection:
-            connection.close()
+            try:
+                from database.sqlconnection import get_connection_pool
+                get_connection_pool().release_connection(connection)
+            except Exception:
+                try:
+                    connection.close()
+                except Exception:
+                    pass
 
 if __name__ == '__main__':
     # This allows running the setup directly for testing or manual setup

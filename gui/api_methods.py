@@ -20,12 +20,18 @@ def get_ws_base_url():
     url = f"ws://{api_ip}:{api_port}/ws?token={token}"
     return url
 
-def test_db_connection_api(db_params: dict) -> bool:
+def test_db_connection_api(db_params: dict = None) -> bool:
     """
     Validates database connection parameters through the service/persistence boundary.
     """
     from database.sqlconnection import test_db_connection
-    return test_db_connection(db_params)
+    if db_params is None:
+        cfg = get_config()
+        db_params = cfg
+    try:
+        return test_db_connection(db_params)
+    except Exception:
+        return False
 
 def get_client():
     global _client
@@ -352,8 +358,11 @@ async def listen_to_updates(on_status_update, on_message_update):
     import json
     import asyncio
 
+    import re
+
     ws_url = get_ws_base_url()
-    log_info(f"[API_METHODS] Connecting to WebSocket: {ws_url}")
+    sanitized_ws_url = re.sub(r'(token=)[^&]+', r'\1********', ws_url)
+    log_info(f"[API_METHODS] Connecting to WebSocket: {sanitized_ws_url}")
     
     while True:
         try:

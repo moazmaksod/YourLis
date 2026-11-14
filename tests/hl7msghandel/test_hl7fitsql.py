@@ -17,6 +17,7 @@ def test_update_hl7_dictionary_sql_data(mock_logger):
     assert updated["COLUMN_NAME"]["Col1"] == "NewValue"
 
 def test_update_hl7_dictionary_manual_data(mock_logger):
+    """Verify MANUAL keys are preserved with provided manual data."""
     hl7_msg = MagicMock()
 
     hl7_dict = {
@@ -28,19 +29,35 @@ def test_update_hl7_dictionary_manual_data(mock_logger):
 
     updated = update_hl7_dictionary(hl7_msg, hl7_dict, manual_data=manual_data)
 
-    # Logic says for MANUAL: update if provided, then append to delete list?
-    # Code:
-    # if manual_data is not None: result_dictionary[key] = manual_data[key]
-    # result_dictionary_deleted_list.append(key)
-    # ...
-    # del result_dictionary[result]
+    assert updated["COLUMN_NAME"]["Col1"] == "ManualValue"
 
-    # So it updates it then deletes it from result_dictionary?
-    # Let's check logic:
-    # "Remove keys from the result dictionary that were marked for deletion"
 
-    # If it is deleted, it won't be in the output.
+def test_update_hl7_dictionary_manual_data_omitted_when_missing(mock_logger):
+    """Verify MANUAL keys are safely omitted when manual data is not provided."""
+    hl7_msg = MagicMock()
+
+    hl7_dict = {
+        "COLUMN_NAME": {"Col1": "MANUAL"},
+        "CONDITION": {}
+    }
+
+    updated = update_hl7_dictionary(hl7_msg, hl7_dict, manual_data=None)
+
     assert "Col1" not in updated["COLUMN_NAME"]
+
+
+def test_update_hl7_dictionary_sql_data_missing_sets_none(mock_logger):
+    """Verify missing SQL keys are assigned None rather than literal 'SQL'."""
+    hl7_msg = MagicMock()
+
+    hl7_dict = {
+        "COLUMN_NAME": {"Col1": "SQL"},
+        "CONDITION": {}
+    }
+
+    updated = update_hl7_dictionary(hl7_msg, hl7_dict, sql_data={})
+
+    assert updated["COLUMN_NAME"]["Col1"] is None
 
 def test_update_hl7_dictionary_from_msg(mock_logger):
     hl7_msg = MagicMock()

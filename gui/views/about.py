@@ -1,6 +1,6 @@
 # flet_app/views/about.py
 import flet as ft
-from setting.config import get_config, save_config
+from setting.config import get_config
 
 cfg = get_config()  # Load configuration from file
 app_ver = cfg['VERSION']

@@ -2,7 +2,7 @@ import copy
 import asyncio
 from database.sqlqueriesExe import querie_exe
 from hl7msghandel.hl7fitsql import update_hl7_dictionary
-from database.sqlconnection import get_db_connection
+from log.logger import log_error
 
 
 SOURCE = "Database"
@@ -29,7 +29,7 @@ def data_insert_for(
         hl7_message, hl7_dictionary, sql_data, manual_data
     )
 
-    table_name = db_schema["TABLE_NAME"]
+    table_name = db_schema["TABLE_NAME"].strip("[]")
 
     # Protect global schema dictionary from in-place mutation
     column_name = copy.deepcopy(db_schema["COLUMN_NAME"])
@@ -42,6 +42,10 @@ def data_insert_for(
         for key, col_db_name in column_name.items()
         if key in hl7_column
     }
+
+    if not column_name:
+        log_error(f"Cannot execute INSERT: no columns specified for {table_name}", source=SOURCE)
+        raise ValueError(f"Cannot execute INSERT: no columns specified for {table_name}")
 
     # select the values holder from db schema for column
     values_holder = tuple(column_name.keys())
@@ -79,7 +83,7 @@ def data_update_for(
         hl7_message, hl7_dictionary, sql_data, manual_data
     )
 
-    table_name = db_schema["TABLE_NAME"]
+    table_name = db_schema["TABLE_NAME"].strip("[]")
 
     # Protect global schema dictionary from in-place mutation
     column_name = copy.deepcopy(db_schema["COLUMN_NAME"])
@@ -93,6 +97,10 @@ def data_update_for(
         for key, col_db_name in column_name.items()
         if key in hl7_column
     }
+
+    if not column_name:
+        log_error(f"Cannot execute UPDATE: no columns specified for {table_name}", source=SOURCE)
+        raise ValueError(f"Cannot execute UPDATE: no columns specified for {table_name}")
 
     # select the values holder from db schema for column
     column_values_holder = tuple(column_name.keys())
@@ -146,16 +154,16 @@ def data_select_for(
     )
 
     # select the table name from db schema
-    table_name = db_schema["TABLE_NAME"]
+    table_name = db_schema["TABLE_NAME"].strip("[]")
 
     # select the column name from db schema
-    column_name = db_schema["COLUMN_NAME"]
+    column_name = copy.deepcopy(db_schema["COLUMN_NAME"])
 
     # select the selected value variable from db schema
     selected_value_variable = tuple(column_name.keys())
 
     # select the condition data from db schema
-    condition = db_schema["CONDITION"]
+    condition = copy.deepcopy(db_schema["CONDITION"])
 
     # select the target value from hl7 message
     hl7_column = hl7_dictionary["CONDITION"]
@@ -200,8 +208,8 @@ def data_delete_for(
         hl7_message, hl7_dictionary, sql_data, manual_data
     )
 
-    table_name = db_schema["TABLE_NAME"]
-    condition = db_schema["CONDITION"]
+    table_name = db_schema["TABLE_NAME"].strip("[]")
+    condition = copy.deepcopy(db_schema["CONDITION"])
 
     # select the target value from hl7 message
     hl7_column = hl7_dictionary["CONDITION"]

@@ -50,14 +50,16 @@ def querie_exe(data, expect_results=True):
             # For EXEC queries, handle based on whether results are expected
             elif sql.strip().upper().startswith("EXEC"):
                 if expect_results:
-                    while cursor.description is None and cursor.nextset():
-                        pass
+                    _max_sets = 50
+                    while cursor.description is None and cursor.nextset() and _max_sets > 0:
+                        _max_sets -= 1
                     if cursor.description:
                         results = cursor.fetchall()
                         log_info(
                             f"Executed EXEC query: {sql} with {len(values)} parameter(s)",
                             source=SOURCE,
                         )
+                        connection.commit()
 
                         if results:
                             columns = [column[0] for column in cursor.description]
@@ -70,10 +72,11 @@ def querie_exe(data, expect_results=True):
                         log_info("No results returned for EXEC query.", source=SOURCE)
                         return None
                     else:
+                        connection.commit()
                         log_info("No result set available for EXEC query.", source=SOURCE)
                         return None
                 else:
-                    # For EXEC that doesn't return results, just commit
+                    # For EXEC that doesn't return results, commit the transaction
                     connection.commit()
                     log_info(
                         f"Executed non-result EXEC query: {sql} with {len(values)} parameter(s)",
@@ -101,9 +104,7 @@ def querie_exe(data, expect_results=True):
                 connection.rollback()
             except Exception:
                 pass
-            if isinstance(e, (pyodbc.OperationalError, ConnectionError)):
-                raise
-            return None
+            raise
 
         finally:
             cursor.close()

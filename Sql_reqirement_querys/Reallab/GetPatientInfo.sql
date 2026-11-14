@@ -73,7 +73,7 @@ BEGIN
     -- Add conditions for date range search based on provided dates
     IF @START_DATE IS NOT NULL AND @END_DATE IS NOT NULL
     BEGIN
-        SET @SQL = @SQL + ' AND pt.requestdate BETWEEN @StartDate AND @EndDate';
+        SET @SQL = @SQL + ' AND pt.requestdate >= @StartDate AND pt.requestdate < DATEADD(day, 1, @EndDate)';
     END
     ELSE IF @START_DATE IS NOT NULL
     BEGIN
@@ -81,7 +81,7 @@ BEGIN
     END
     ELSE IF @END_DATE IS NOT NULL
     BEGIN
-        SET @SQL = @SQL + ' AND pt.requestdate <= @EndDate'; -- Only end date provided
+        SET @SQL = @SQL + ' AND pt.requestdate < DATEADD(day, 1, @EndDate)'; -- Only end date provided (entire day inclusive)
     END
 
     -- Check for the result finished status

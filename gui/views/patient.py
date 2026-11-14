@@ -1,6 +1,7 @@
 import flet as ft
 from gui.api_methods import fetch_patients_api
 from gui.views.cbc_report import cbc_report_view
+from gui.components import show_snack_bar
 from log.logger import log_info, log_error
 import datetime
 
@@ -370,8 +371,7 @@ def patient_view(page: ft.Page):
                 await update_pagination_display(current_page)  # Ensure the UI shows Page 1
             except Exception as ex:
                 log_error(f"Error in search_handler: {ex}")
-                page.snack_bar = ft.SnackBar(ft.Text("Database error: " + str(ex)), open=True)
-                page.update()
+                show_snack_bar(page, f"Database error: {ex}")
             finally:
                 on_done(None)
 

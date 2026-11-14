@@ -110,23 +110,23 @@ async def run_server():
             await stop_event.wait()  # Wait for the stop event
             log_info("Server is shutting down...", source=SOURCE)
 
-            # Cancel all client tasks using a snapshot to avoid list mutation bug
+            # Close server socket FIRST to reject any new incoming connections
+            server.close()
+            await server.wait_closed()
+
+            # Cancel all active client tasks using a snapshot to avoid list mutation
             tasks_to_cancel = list(server_tasks)
             for task in tasks_to_cancel:
                 task.cancel()
             if tasks_to_cancel:
                 await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
 
-            server.close()
-            await server.wait_closed()
             log_info("Server has shut down gracefully.", source=SOURCE)
 
-
-
     except OSError as e:
-        if e.errno == 98:  # Address already in use
+        if e.errno in (98, 10048):  # Address already in use (POSIX 98, Windows WSA 10048)
             log_error(f"Port {SERVER_PORT} is busy.", source=SOURCE)
-        elif e.errno == 99:  # Cannot assign requested address
+        elif e.errno in (99, 10049):  # Cannot assign requested address
             log_error(f"Invalid address or unavailable network: {SERVER_HOST}:{SERVER_PORT}", source=SOURCE)
         else:
             log_error(f"Unexpected error: {e}", source=SOURCE)
@@ -134,10 +134,6 @@ async def run_server():
         log_error(f"Unhandled error: {e}", source=SOURCE)
     finally:
         await set_server_running(False)
-
-
-
-    await set_server_running(False)
 
 
 async def client_connected(reader, writer):

@@ -144,3 +144,73 @@ def test_phi_redacting_filter_sql_duplicate_key_exception():
     assert "9****4" in record.msg
     assert "J******E" in record.msg
 
+
+def test_phi_redacting_filter_tokens_and_urls():
+    """Verify API tokens and credentials in URLs/headers are masked."""
+    filter_instance = PHIRedactingFilter()
+    msg = "Connecting to ws://127.0.0.1:8000/ws?token=abcd1234efgh5678 and Authorization: Bearer secret_bearer_token_xyz"
+    record = logging.LogRecord(
+        name="HealthMesh",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=50,
+        msg=msg,
+        args=(),
+        exc_info=None,
+    )
+    filter_instance.filter(record)
+    assert "abcd1234efgh5678" not in record.msg
+    assert "token=********" in record.msg
+    assert "secret_bearer_token_xyz" not in record.msg
+    assert "Bearer ********" in record.msg
+
+
+def test_phi_redacting_filter_pid_extended_fields():
+    """Verify PID extended clinical fields (DOB, SSN, Address, Phone) are masked."""
+    filter_instance = PHIRedactingFilter()
+    # PID with ExtID, IntID, AltID, Name, Maiden, DOB, Sex, Alias, Race, Address, County, Phone, WorkPhone, ..., SSN (PID-19)
+    raw_pid = "PID|1|EXT999|INT123|ALT456|DOE^JANE||19900515|F|||123 HEALTH ST||0123456789|||||123-45-6789"
+    record = logging.LogRecord(
+        name="HealthMesh",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=60,
+        msg=f"Received: {raw_pid}",
+        args=(),
+        exc_info=None,
+    )
+    filter_instance.filter(record)
+    assert "EXT999" not in record.msg
+    assert "INT123" not in record.msg
+    assert "ALT456" not in record.msg
+    assert "DOE^JANE" not in record.msg
+    assert "19900515" not in record.msg
+    assert "123 HEALTH ST" not in record.msg
+    assert "0123456789" not in record.msg
+    assert "123-45-6789" not in record.msg
+
+
+def test_phi_redacting_formatter_scrubs_tracebacks():
+    """Verify PHIRedactingFormatter scrubs sensitive data in exception tracebacks."""
+    from log.log_config import PHIRedactingFormatter
+    formatter = PHIRedactingFormatter("%(message)s")
+
+    try:
+        raise ValueError("Database connection failed: PWD=SuperSecretPassword99; with patient DOE JOHN")
+    except ValueError:
+        import sys
+        record = logging.LogRecord(
+            name="HealthMesh",
+            level=logging.ERROR,
+            pathname=__file__,
+            lineno=70,
+            msg="Exception occurred",
+            args=(),
+            exc_info=sys.exc_info(),
+        )
+
+    formatted = formatter.format(record)
+    assert "SuperSecretPassword99" not in formatted
+    assert "PWD=********" in formatted
+
+

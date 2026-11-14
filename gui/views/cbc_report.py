@@ -1,6 +1,6 @@
 from gui.api_methods import fetch_patient_cbc_api
 from gui.views.report_component import ReportPatientInfo, ReportPatientResult
-from gui.components import show_dialog, dismiss_dialog
+from gui.components import show_dialog, dismiss_dialog, show_snack_bar
 from log.logger import log_info, log_error
 import flet as ft
 import os
@@ -46,13 +46,7 @@ async def cbc_report_view(page: ft.Page, patient_id):
 
     # Ensure result_data is not empty before proceeding
     if not result_data:
-        snack = ft.SnackBar(ft.Text("No result found for this patient ID."))
-        if hasattr(page, "open"):
-            page.open(snack)
-        else:
-            page.overlay.append(snack)
-            snack.open = True
-            page.update()
+        show_snack_bar(page, "No result found for this patient ID.")
         return
 
     result_data = result_data[0]  # Assuming we always take the first result
@@ -501,25 +495,13 @@ async def cbc_report_view(page: ft.Page, patient_id):
                 f.write(html_content)
             log_info(f"HTML report written to: {html_path}")
 
-            snack = ft.SnackBar(ft.Text(f"HTML saved: {html_path}"))
-            if hasattr(page, "open"):
-                page.open(snack)
-            else:
-                page.overlay.append(snack)
-                snack.open = True
-                page.update()
+            show_snack_bar(page, f"HTML saved: {html_path}")
         except Exception as ex:
             log_error(f"Failed to save HTML: {ex}")
             import traceback
 
             log_error(traceback.format_exc())
-            snack = ft.SnackBar(ft.Text(f"Failed to save HTML: {ex}"))
-            if hasattr(page, "open"):
-                page.open(snack)
-            else:
-                page.overlay.append(snack)
-                snack.open = True
-                page.update()
+            show_snack_bar(page, f"Failed to save HTML: {ex}", bgcolor="red")
 
     # Define report_view outside the if block to ensure it's always defined
     # or handle the case where result_data is empty

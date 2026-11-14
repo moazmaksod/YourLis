@@ -7,18 +7,28 @@ SOURCE = "Server"
 
 async def send_outgoing_data(writer, response):
     """
-    Sends a message to a target client.
+    Sends a message to a target client with safe type normalization.
 
     Args:
         writer (StreamWriter): StreamWriter for the target client.
-        response (str): The message to send.
+        response (str, bytes or None): The message to send.
     """
+    if response is None:
+        return
+
     try:
-        # Encode the response and write it to the client
-        writer.write(response.encode())
+        if isinstance(response, str):
+            payload = response.encode("utf-8")
+        elif isinstance(response, (bytes, bytearray)):
+            payload = bytes(response)
+        else:
+            payload = str(response).encode("utf-8")
+
+        # Write and drain response to the client socket
+        writer.write(payload)
         await writer.drain()
         log_info(
-            f"Response succdesfully sent to : {writer.get_extra_info('peername')}",
+            f"Response successfully sent to : {writer.get_extra_info('peername')}",
             source=SOURCE,
         )
 

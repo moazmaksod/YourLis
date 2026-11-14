@@ -64,7 +64,25 @@ def test_validate_hl7_message_missing_msh(mock_logger):
     assert validate_hl7_message(mock_msg, "in") is False
 
 def test_get_required_segments():
-    assert "OBX" in get_required_segments("ORM^O01")
+    assert "ORC" in get_required_segments("ORM^O01")
     assert "PID" in get_required_segments("ORU^R01")
     assert "MSA" in get_required_segments("ACK")
+    assert "MSA" in get_required_segments("ACK^R01")
     assert get_required_segments("Unknown") == []
+
+
+def test_parse_hl7_message_normalizes_crlf_and_lf(mocker, mock_logger):
+    raw_crlf = "MSH|^~\\&|Sender|Receiver|20240101||ORU^R01|123|P|2.3.1\r\nPID|1||12345||Doe^John\r\nOBX|1|NM|WBC||6.5\r\n"
+    mocker.patch("hl7msghandel.hl7parser.validate_hl7_message", return_value=True)
+
+    parsed = parse_hl7_message(raw_crlf, "IN")
+    assert parsed is not None
+    assert len(parsed) >= 2
+
+
+def test_parse_hl7_message_validation_failure_returns_none(mocker, mock_logger):
+    raw_message = "MSH|^~\\&|Sender|Receiver|20240101||ORU^R01|123|P|2.3.1\rPID|1||12345||Doe^John\r"
+    mocker.patch("hl7msghandel.hl7parser.validate_hl7_message", return_value=False)
+
+    parsed = parse_hl7_message(raw_message, "IN")
+    assert parsed is None

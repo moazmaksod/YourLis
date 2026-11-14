@@ -31,6 +31,17 @@ def main():
         f'--add-data={SQL_QUERIES_PATH}{separator}Sql_reqirement_querys',
         '--hidden-import=pyodbc',
         '--hidden-import=uvicorn',
+        '--hidden-import=uvicorn.loops.auto',
+        '--hidden-import=uvicorn.loops.asyncio',
+        '--hidden-import=uvicorn.protocols.http.auto',
+        '--hidden-import=uvicorn.protocols.http.h11_impl',
+        '--hidden-import=uvicorn.protocols.websockets.auto',
+        '--hidden-import=uvicorn.protocols.websockets.websockets_impl',
+        '--hidden-import=uvicorn.lifespans.on',
+        '--hidden-import=uvicorn.lifespans.off',
+        '--hidden-import=portalocker',
+        '--hidden-import=websockets',
+        '--hidden-import=concurrent_log_handler',
         '--hidden-import=flet',
         '--hidden-import=fastapi',
         '--hidden-import=pydantic',
@@ -44,7 +55,8 @@ def main():
     if ICON_PATH:
         command.extend(['--icon', ICON_PATH])
 
-    print(f"Running PyInstaller with command: pyinstaller {" ".join(command)}")
+    cmd_str = " ".join(command)
+    print(f"Running PyInstaller with command: pyinstaller {cmd_str}")
     
     try:
         PyInstaller.__main__.run(command)

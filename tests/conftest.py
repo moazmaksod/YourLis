@@ -5,9 +5,17 @@ from unittest.mock import MagicMock
 mock_pyodbc = MagicMock()
 class MockOperationalError(Exception): pass
 class MockDatabaseError(Exception): pass
+class MockInterfaceError(Exception): pass
+class MockIntegrityError(Exception): pass
+class MockProgrammingError(Exception): pass
+class MockDataError(Exception): pass
 class MockError(Exception): pass
 mock_pyodbc.OperationalError = MockOperationalError
 mock_pyodbc.DatabaseError = MockDatabaseError
+mock_pyodbc.InterfaceError = MockInterfaceError
+mock_pyodbc.IntegrityError = MockIntegrityError
+mock_pyodbc.ProgrammingError = MockProgrammingError
+mock_pyodbc.DataError = MockDataError
 mock_pyodbc.Error = MockError
 sys.modules["pyodbc"] = mock_pyodbc
 
@@ -51,6 +59,7 @@ def mock_db_connection(mocker):
     mock_cursor.execute.return_value = None
     mock_cursor.fetchall.return_value = []
     mock_cursor.description = []
+    mock_cursor.nextset.return_value = None
 
     # Since we mocked pyodbc in sys.modules, we need to ensure tests can still access/patch it if needed
     # But usually patching pyodbc.connect in tests works on the mock object in sys.modules

@@ -37,6 +37,30 @@ def test_db_conn_fail_dialog_structure_and_callbacks():
     mock_on_settings.assert_called_once()
 
 
+def test_close_confirm_dialog_no_click_dismisses_cleanly():
+    """
+    Verify clicking 'No' on the close confirmation dialog properly dismisses the dialog
+    via page.close without tearing down controls prematurely.
+    """
+    from gui.components import close_confirm_dialog
+    mock_page = MagicMock(spec=ft.Page)
+
+    dialog = close_confirm_dialog(mock_page)
+
+    assert isinstance(dialog, ft.AlertDialog)
+    assert dialog.title.value == "Please confirm"
+    assert len(dialog.actions) == 2
+
+    no_btn = dialog.actions[1]
+    no_text = getattr(no_btn, "text", None) or getattr(no_btn, "content", None)
+    assert no_text == "No"
+
+    # Click No
+    no_btn.on_click(MagicMock())
+    assert dialog.open is False
+    mock_page.close.assert_called_once_with(dialog)
+
+
 def test_main_flet_import_db_conn_fail_dialog():
     """
     Verify that gui.main_flet cleanly imports db_conn_fail_dialog without NameError or ImportError.

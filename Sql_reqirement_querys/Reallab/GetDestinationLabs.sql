@@ -9,7 +9,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
     SELECT [gehahid], [gehahname]
-    FROM [Patients].[dbo].[Gehats]
+    FROM [dbo].[Gehats]
     WHERE morsel != 0;
 END
 GO

@@ -635,16 +635,26 @@ class MessageCard(ft.Container):
             copy_btn.text = "Copied!"
             copy_btn.icon = ft.Icons.CHECK
             page.update()
-            # Reset after 2 seconds
-            import threading
-            def reset():
-                import time
-                time.sleep(2)
+            # Reset after 2 seconds safely on event loop
+            async def reset_task():
+                import asyncio
+                await asyncio.sleep(2)
                 copy_btn.text = "Copy All"
                 copy_btn.icon = ft.Icons.CONTENT_COPY
-                if dialog.open:
-                    page.update()
-            threading.Thread(target=reset, daemon=True).start()
+                if getattr(dialog, "open", False):
+                    try:
+                        page.update()
+                    except Exception:
+                        pass
+
+            if hasattr(page, "run_task"):
+                page.run_task(reset_task)
+            else:
+                import asyncio
+                try:
+                    asyncio.create_task(reset_task())
+                except RuntimeError:
+                    pass
         
         copy_btn = ft.ElevatedButton(
             "Copy All",

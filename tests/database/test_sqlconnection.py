@@ -124,6 +124,45 @@ def test_connection_pool_rollback_on_release_and_is_alive(mocker, mock_config):
     mock_broken_conn.close.assert_called_once()
 
 
+def test_connection_pool_bounds_max_connections_and_timeout(mocker, mock_config):
+    """Verify ConnectionPool raises ConnectionError when pool is exhausted."""
+    from database.sqlconnection import ConnectionPool
+    pool = ConnectionPool(max_connections=2, timeout=0.1)
+
+    mock_conn1 = mocker.MagicMock()
+    mock_conn2 = mocker.MagicMock()
+    mocker.patch("pyodbc.connect", side_effect=[mock_conn1, mock_conn2])
+
+    c1 = pool.get_connection()
+    c2 = pool.get_connection()
+
+    # Attempting 3rd checkout must timeout and raise ConnectionError
+    with pytest.raises(ConnectionError, match="exhausted"):
+        pool.get_connection()
+
+    # Once a connection is released, checkout succeeds
+    pool.release_connection(c1)
+    c3 = pool.get_connection()
+    assert c3 is c1
+
+
+def test_connection_pool_prevents_double_release(mocker, mock_config):
+    """Verify releasing the same connection twice does not corrupt semaphore or pool queue."""
+    from database.sqlconnection import ConnectionPool
+    pool = ConnectionPool(max_connections=2, timeout=0.1)
+
+    mock_conn = mocker.MagicMock()
+    mocker.patch("pyodbc.connect", return_value=mock_conn)
+
+    c = pool.get_connection()
+    pool.release_connection(c)
+    # Second release should be safely ignored
+    pool.release_connection(c)
+
+    # Queue should contain only 1 instance of c
+    assert pool._pool.qsize() == 1
+
+
 def test_setup_database_schema_executes_all_scripts(mocker, mock_db_connection):
     from database.db_schema import setup_database_schema
     conn, cursor = mock_db_connection

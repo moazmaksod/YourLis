@@ -1,324 +1,429 @@
-# 02_ARCHITECTURAL_DIAGNOSIS: Root Flaws, Vulnerabilities, & Anti-Patterns
+# 02_ARCHITECTURAL_DIAGNOSIS: Root Flaws, Vulnerabilities & Anti-Patterns
 
 **Repository:** `YourLIS` (HealthMesh Laboratory Information System)  
-**Auditor:** Lead Software Architect  
-**Date:** 2026-11-13  
-**Status:** Complete Diagnostic Assessment  
+**Audit Phase:** Fresh Zero-Assumption Architectural Audit (Post-Sprint Baseline)  
+**Date:** 2026-11-14  
+**Auditor:** Independent Principal Software Architect (Swarm Synthesis)  
+**Status:** Comprehensive Diagnostic Assessment  
 
 ---
 
-## Executive Diagnostic Summary
+## Executive Summary & Threat Model
 
-This diagnosis presents the categorized findings of an exhaustive, evidence-first audit across all subsystems of YourLIS. Every claim is substantiated with exact file paths and line numbers.
+This diagnosis synthesizes the empirical, line-by-line findings of four specialized Goldfish subagents auditing the YourLIS codebase across:
+1. TCP/MLLP Transport & HL7 Parsing Engine
+2. Database, Connection Pooling & SQL Persistence
+3. Process Orchestration, REST API, Security & Logging
+4. Desktop Presentation Tier (Flet) & Build Pipeline
 
-The audit has revealed **catastrophic silent data corruption bugs**, **event-loop freezing anti-patterns**, **cleartext Protected Health Information (PHI) exposure**, **multiple runtime fatal crashes on core features (CSV export, connection failure dialog)**, and **complete absence of connection pooling and transaction safety**.
+While recent refactoring sprints successfully introduced non-blocking async offloading (`asyncio.to_thread`), bounded buffer limits (5 MB), and deepcopy schema guards in `data_insert_for`, the audit revealed **critical protocol deadlocks**, **credential leakage in log files**, **PHI exposure in exception tracebacks**, **unconstrained database connection creation**, and **abrupt process termination on Windows**.
 
 ---
 
-## Category 1: Structural Flaws, Modularity, & Tight Coupling
+## Category 1: Architectural Drift & Layer Violations (Rule 4)
 
-### 1.1 Destructive In-Place Mutation of Global Schema Dictionaries (Silent Data Loss)
-- **Citations:** `database/sqlqueries.py:38-42`, `database/sqlqueries.py:84-95`, `database/sqldbdictionary.py:37-72`
-- **Mechanism:** In `data_insert_for` and `data_update_for`, the variable `column_name = db_schema["COLUMN_NAME"]` obtains a direct reference to the shared module-level schema dictionary (e.g. `CBC_RESULT_SQL`). When an incoming HL7 message has a subset of fields, the code executes:
+### 1.1 Direct Database Connection and Execution in GUI Root
+- **Citations:** `gui/main_flet.py:97`, `gui/main_flet.py:118`
+- **Mechanism:** In the presentation root `main_flet.py`:
   ```python
-  for key in column_name.keys():
-      if key not in (hl7_column.keys()):
-          db_schema_delete_extra_keys.append(key)
-  for key in db_schema_delete_extra_keys:
-      del column_name[key] # PERMANENT DESTRUCTION OF GLOBAL SCHEMA
+  97: from database.sqlconnection import get_db_connection_context
+  ...
+  118: with get_db_connection_context():
+  119:     pass
   ```
-- **Architectural Impact:** This deletes dictionary keys directly from `sqldbdictionary.CBC_RESULT_SQL` in memory. If a message arrives without an `MCV` or `RDW` value, those columns are permanently deleted from the schema for the remainder of the process execution. All subsequent incoming messages for other patients will completely omit those lab tests, causing progressive, permanent, and silent clinical data loss.
+  The presentation tier directly imports the persistence layer and opens a raw database connection during UI startup.
+- **Architectural Impact:** Violates Rule 4 (Strict n-Tier Decoupling). If the database server is offline or unreachable, the synchronous PyODBC connection timeout (15–30 seconds) freezes the Flet desktop window during application launch before the main view is mounted.
 
-### 1.2 Two-Tier Data Access Schism (Direct DB vs. REST API)
-- **Citations:** `gui/views/patient.py:2, 90`, `gui/views/cbc_report.py:1, 19`, `gui/views/send_out.py:6, 37, 48`, `gui/api_methods.py:1-158`
-- **Mechanism:** The application defines a REST/WebSocket API (`api/app.py`), yet the GUI views bypass it completely for 90% of business operations, importing raw PyODBC SQL functions (`database.sqlqueries.exec_procedure_for`) directly inside UI event handlers.
+### 1.2 Pervasive Direct Database Fallbacks in Presentation API Client
+- **Citations:** `gui/api_methods.py:27`, `gui/api_methods.py:169-179`, `gui/api_methods.py:195-199`, `gui/api_methods.py:236-247`, `gui/api_methods.py:263-266`, `gui/api_methods.py:300-312`, `gui/api_methods.py:335-343`
+- **Mechanism:** While `gui/views/` modules route calls through `gui/api_methods.py`, all data retrieval and modification functions in `api_methods.py` catch HTTP errors and silently fall back to importing `database.sqlqueries`:
+  ```python
+  # gui/api_methods.py:168-179
+  # Graceful fallback to direct DB execution
+  from database.sqlqueries import exec_procedure_for
+  from database.sqldbdictionary import PATIENT_SEARCH_SQL
+  ...
+  return await exec_procedure_for(PATIENT_SEARCH_SQL, db_params) or []
+  ```
 - **Architectural Impact:** 
-  1. Complete architectural incoherence: Server status and live logs travel through HTTP/WebSocket, while patient search, CBC result calculation, financial updates, and lab destination retrievals execute raw SQL on the client machine.
-  2. If deployed across a LAN, every client workstation requires direct SQL Server database ports (1433) opened and valid ODBC drivers installed, making true client-server deployment impossible without exposing the database to the entire network.
+  1. The presentation layer retains compile-time and runtime coupling to the database schema, ODBC drivers, and SQL Server network credentials.
+  2. Bypasses backend REST authentication, authorization, and audit logging when the API server is busy or restarting.
+  3. Precludes deploying the Flet GUI on remote client workstations across a hospital subnet without opening direct SQL Server port 1433 to all endpoints.
 
-### 1.3 Circular Dependency Between Message Domain and Persistence
-- **Citations:** `database/sqlqueries.py:2`, `hl7msghandel/hl7responder.py:3-5`
+### 1.3 Wildcard Persistence Coupling in HL7 Message Handler
+- **Citations:** `hl7msghandel/hl7responder.py:3-5`
 - **Mechanism:**
-  - `database/sqlqueries.py:2` imports `from hl7msghandel.hl7fitsql import update_hl7_dictionary`.
-  - `hl7msghandel/hl7responder.py:3-4` imports `from database.sqlqueries import *`.
-- **Architectural Impact:** The database layer is tightly coupled to the HL7 protocol formatting, violating the Dependency Inversion Principle (DIP). Neither the persistence layer nor the HL7 processing engine can be tested, reused, or refactored independently.
+  ```python
+  from database.sqlqueries import *
+  from database.sqldbdictionary import *
+  from hl7msghandel.hl7dictionary import *
+  ```
+- **Architectural Impact:** The HL7 domain responder pollutes its module namespace with wildcard imports from the persistence layer, tightly coupling messaging logic to database schema dictionaries and preventing independent unit testing.
 
-### 1.4 Manual Data Deletion Flaw in Field Mapping
-- **Citations:** `hl7msghandel/hl7fitsql.py:39-45`, `hl7msghandel/hl7fitsql.py:60-64`
-- **Mechanism:** When a field is designated as `MANUAL`, `update_hl7_dictionary` copies `manual_data[key]`, but then unconditionally appends the key to `result_dictionary_deleted_list`, which is subsequently deleted at line 62 (`del result_dictionary[result]`).
-- **Architectural Impact:** Manual test inputs or overrides can never be saved to the database; they are discarded immediately after assignment.
-
-### 1.5 God Functions & In-Line Business Logic
-- **Citations:** `gui/views/send_out.py:106-348` (`create_send_out_row`), `server/client_handler.py:63-155` (`handle_client_connection`), `hl7msghandel/hl7responder.py:100-206` (`handel_result_message`)
-- **Mechanism:** Single functions span 100 to 250 lines, mixing low-level network bytes, UI widget rendering, nested modal dialog callbacks, SQL query generation, financial calculations, and string encoding.
+### 1.4 Hardcoded 3-Part Database Name in SQL Scripts
+- **Citations:** `Sql_reqirement_querys/Reallab/GetDestinationLabs.sql:11-13`
+- **Mechanism:**
+  ```sql
+  SELECT [gehahid], [gehahname]
+  FROM [Patients].[dbo].[Gehats]
+  WHERE morsel != 0;
+  ```
+- **Architectural Impact:** The database name `[Patients]` is hardcoded in the query. If the database is renamed (e.g. `YourLIS_DB`, `RealLabDB`), or if user logins lack cross-database permissions, queries fail with `Cannot open database "Patients" requested by the login`.
 
 ---
 
-## Category 2: Concurrency, Asyncio Bottlenecks, & Runtime Behavior
+## Category 2: Security, Credentials & PHI Leakage (Rules 3 & 6)
 
-### 2.1 Complete Asyncio Event-Loop Freeze (Blocking Queue Get)
-- **Citations:** `server/client_handler.py:123`, `server/incoming_data.py:40-45`
-- **Mechanism:** In the asynchronous TCP client connection handler (`async def handle_client_connection`), the code calls `handle_incoming_data(message)` synchronously. Inside `handle_incoming_data`:
-  ```python
-  response_thread = Thread(target=threaded_response_generation, args=(response_queue,))
-  response_thread.start()
-  handel_response = response_queue.get(timeout=10) # SYNCHRONOUS BLOCKING WAIT
-  ```
-- **Architectural Impact:** The entire asyncio event loop thread running the backend is completely blocked for up to 10 seconds. During this window:
-  - No new TCP device connections can be accepted (`asyncio.start_server` freezes).
-  - Other connected analyzers cannot transmit data.
-  - All FastAPI REST endpoints (`/server/status`, `/server/messages`) and the WebSocket broadcast task stop responding.
-  - Spawning a raw unpooled `threading.Thread` only to immediately block synchronously with `queue.get()` is an egregious anti-pattern defeating the entire purpose of `asyncio`.
-
-### 2.2 False Asynchronicity & `asyncio.to_thread` Coroutine Passing
-- **Citations:** `database/sqlqueries.py:216-247, 249-272`, `gui/views/patient.py:90`, `gui/views/dashboard.py:123-126`, `gui/views/patient.py:175-176`
+### 2.1 API Bearer Token Transmitted in URL Query and Logged in Cleartext (CWE-598)
+- **Citations:** `gui/api_methods.py:20`, `gui/api_methods.py:356`, `api/app.py:207-214`
 - **Mechanism:**
-  - `exec_procedure_for` is declared as `async def exec_procedure_for(...)`, but contains zero `await` expressions; it calls the blocking synchronous `querie_exe` directly on line 246.
-  - In `gui/views/patient.py:90`, a developer attempting to prevent UI freezes called:
-    `return await asyncio.to_thread(exec_procedure_for, PATIENT_SEARCH_SQL, params) or []`
-  - In Python, `asyncio.to_thread(coroutine_function, ...)` passes the function to a worker thread, which returns the unawaited coroutine object! It does not execute the function body.
-  - To patch this symptom, developers added defensive unwrapping hacks:
-    ```python
-    # gui/views/dashboard.py:123-126
-    while hasattr(result, "__await__"):
-        result = await result
-    # gui/views/patient.py:175-176
-    if asyncio.iscoroutine(all_patient_data):
-        all_patient_data = await all_patient_data
-    ```
-- **Architectural Impact:** When `await all_patient_data` is finally resolved, it runs `exec_procedure_for` on the main GUI event loop, completely undoing the thread offloading and freezing the desktop UI during database queries!
+  1. `get_ws_base_url()` formats: `url = f"ws://{api_ip}:{api_port}/ws?token={token}"`.
+  2. `gui/api_methods.py:356` logs:
+     ```python
+     log_info(f"[API_METHODS] Connecting to WebSocket: {ws_url}")
+     ```
+  3. `PHIRedactingFilter` in `log/log_config.py` contains no regex targeting URL query parameters (`token=...`).
+- **Architectural Impact:** The administrative API bearer token is logged in cleartext into `HealthMesh_log_<date>.log` and printed to console on every connection attempt and every 5-second reconnection loop, violating Rule 3 and Rule 6.
 
-### 2.3 Socket TOCTOU Dynamic Port Allocation Race Condition
-- **Citations:** `main.py:13-22`, `server/server.py:35-44`
+### 2.2 Incomplete PHI Redaction in HL7 Log Records
+- **Citations:** `log/log_config.py:27`, `log/log_config.py:59-69`
+- **Mechanism:** The PID redaction regular expression:
+  ```python
+  PID_PATTERN = re.compile(r'(PID\|[^|\r\n]*\|[^|\r\n]*\|)([^|\r\n]*)(\|[^|\r\n]*\|)([^|\r\n]*)')
+  ```
+  captures:
+  - Group 1: `PID-1` (Set ID) and `PID-2` (External Patient ID). **`PID-2` is left unredacted.**
+  - Group 2: `PID-3` (Internal Patient ID - redacted).
+  - Group 3: `PID-4` (Alternate Patient ID). **`PID-4` is left unredacted.**
+  - Group 4: `PID-5` (Patient Name - redacted).
+  - Crucial identifiers: `PID-7` (Date of Birth), `PID-11` (Patient Address), `PID-13` (Phone Number), and `PID-19` (SSN/National ID) are completely unmatched and left in cleartext.
+- **Architectural Impact:** Clinical instruments outputting national IDs in `PID-2` or `PID-4`, or transmitting birthdates in `PID-7`, have protected health information written directly into application log files and in-memory communication message deques.
+
+### 2.3 Exception Traceback PHI & Password Leakage (`exc_info`)
+- **Citations:** `log/log_config.py:36-47`
+- **Mechanism:** `PHIRedactingFilter.filter` inspects only `record.msg` and `record.message`. It does not sanitize `record.exc_info` or `record.exc_text`.
+- **Architectural Impact:** Whenever an exception is logged with `exc_info=True` or via `log_error` in an exception block, Python's `logging.Formatter` serializes the traceback. Any local variables, cleartext SQL connection strings with passwords (`PWD=...`), or unredacted patient payloads in the traceback lines bypass `PHIRedactingFilter` completely and leak to disk and stdout.
+
+### 2.4 Unauthenticated Information Disclosure Endpoint `/server/status`
+- **Citations:** `api/app.py:185-191`
 - **Mechanism:**
   ```python
-  with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-      s.bind((api_ip, 0))
-      _, port = s.getsockname()
-  return port # Socket is closed immediately upon with-block exit
+  @app.get("/server/status", response_model=ServerStatus)
+  async def get_server_status():
+      ...
+      clients = clients_with_names
+      return ServerStatus(state=state, text=text, clients=clients)
   ```
-- **Architectural Impact:** A Time-Of-Check to Time-Of-Use (TOCTOU) race condition exists. After `s.close()` releases the port, another process on the system can claim the port before `run_fastapi` calls `uvicorn.run(...)`. Uvicorn then crashes immediately with `WSAEADDRINUSE`. The identical bug exists in `server/server.py:35` (`check_server_start_capability`).
+  The endpoint lacks `dependencies=[Depends(verify_token)]`.
+- **Architectural Impact:** Any client on the local network can query this endpoint without credentials, enumerating all connected analyzers, their IP addresses, assigned identifiers, and operational states.
 
-### 2.4 Server Shutdown Task Mutation Bug & Client Leak
-- **Citations:** `server/server.py:113-118`, `server/server.py:158`
-- **Mechanism:** During server shutdown in `run_server`:
-  ```python
-  for task in server_tasks:
-      task.cancel()
-      await task # Yields control
-  ```
-  When `await task` yields control, `client_connected` resumes into its `finally:` block and executes `server_tasks.remove(task)`.
-- **Architectural Impact:** Mutating a list while iterating over it in Python skips the element immediately following the removed index. If multiple analyzers are connected, every second client task is skipped, never cancelled, and left as an orphaned socket hanging in memory.
-
-### 2.5 Cross-Process Monkeypatching Disconnect
-- **Citations:** `main.py:65-72`, `main.py:343-344`, `gui/api_methods.py:5, 8-13`
-- **Mechanism:** `main.py` defines `patch_api_methods_base_url` which sets `gui.api_methods.api_base_url = f"http://{api_ip}:{port}"`.
-- **Architectural Impact:** `flet_process` runs in a completely separate child OS process (via Windows `multiprocessing.Process` with `spawn`). Modifying global variables in `main.py` has zero effect on the child process. The child GUI process works around this only because `gui/api_methods.py` ignores `api_base_url` and re-reads `config.json` from disk on every single HTTP request. `api_base_url` is dead code.
-
-### 2.6 Ungraceful Process Termination & Process Leaks
-- **Citations:** `main.py:360-366`
-- **Mechanism:** On desktop window close, `main.py:361` calls `fastapi_process.terminate()`. On Windows, this translates directly to the Win32 `TerminateProcess` API, forcefully killing the Python interpreter without executing `finally` blocks, atexit handlers, or closing open TCP sockets/database connections.
-- **Architectural Impact:** If `fastapi_process` does not exit within 3 seconds, line 364 only logs a warning (`log_info("FastAPI process did not exit gracefully, killing...")`), but **never calls `fastapi_process.kill()`**, leaving an orphaned background process permanently holding port bindings.
-
----
-
-## Category 3: Data & Persistence Layer Flaws
-
-### 3.1 Zero Connection Pooling & Socket Thrashing
-- **Citations:** `database/sqlconnection.py:11-74`, `database/sqlqueriesExe.py:25, 96`
-- **Mechanism:** Every single query executed by `querie_exe` invokes `connection = get_db_connection()`, which calls `pyodbc.connect(..., timeout=3)`. In the `finally:` block at line 96, it immediately calls `connection.close()`.
-- **Architectural Impact:** There is zero connection pooling. A single incoming HL7 result message (`ORU^R01`) executes 4 sequential queries (`PATIENT_TEST_SQL`, `PATIENT_INFO_SQL`, `RESULT_EXIST_SQL`, `CBC_RESULT_SQL`), forcing 4 complete TCP and TDS handshakes, SSL/TLS negotiations, and SQL Server authentication roundtrips. Under continuous analyzer load, this leads to ephemeral port exhaustion (`TIME_WAIT` saturation) and high latency.
-
-### 3.2 Corrupted Data Insertion on Missing HL7 Segments
-- **Citations:** `hl7msghandel/hl7fitsql.py:54-58`, `database/sqlqueries.py:48`
-- **Mechanism:** In `update_hl7_dictionary`:
-  ```python
-  try:
-      segment = result_dictionary[key]["S"]
-      s_number = int(result_dictionary[key]["N"])
-      field = int(result_dictionary[key]["F"])
-      result_value = hl7_message.segments(segment)[s_number][field]
-      result_dictionary[key] = result_value
-  except Exception as e:
-      log_error(f"Error updating condition dictionary: {e}", source=SOURCE)
-  ```
-  If an analyzer omits a test segment (e.g. OBX for Basophils), an `IndexError` is logged, but `result_dictionary[key]` is **never removed or set to null**. It retains the original dictionary definition: `{"S": "OBX", "N": "16", "F": "5"}`!
-- **Architectural Impact:** In `database/sqlqueries.py:48`, the code executes:
-  `values = tuple(str(hl7_column[value]) for value in values_holder)`
-  The dictionary literal string `"\"{'S': 'OBX', 'N': '16', 'F': '5'}\""` is formatted as a parameter and inserted into the clinical database column! The database is populated with raw Python dictionary strings instead of NULL or numeric test values.
-
-### 3.3 Query Cardinality Assumption & Silent Row Truncation
-- **Citations:** `database/sqlqueriesExe.py:38-47`
-- **Mechanism:** In `querie_exe` for SELECT queries:
-  ```python
-  results = cursor.fetchall()
-  if results:
-      selected_value = {var: item for var, item in zip(selected_value_variable, results[0])}
-      return selected_value
-  ```
-- **Architectural Impact:** `querie_exe` blindly returns only `results[0]`. Any SELECT query that matches more than one record silently discards all subsequent rows.
-
-### 3.4 Unescaped Dynamic SQL Identifiers
-- **Citations:** `database/sqlqueries.py:52, 117, 168, 209, 236, 261`
-- **Mechanism:** Query builders use raw f-strings to format table and column names:
-  `sql = f"INSERT INTO [dbo].{table_name} ({columns}) VALUES ({placeholders});"`
-  `sql = f"EXEC {procedure_name} {parameters_string}"`
-- **Architectural Impact:** Table names, column names, and procedure names are interpolated directly without identifier quoting or whitelist validation. While values use `?` placeholders, dynamic identifiers are vulnerable if any schema dictionary is modified at runtime.
-
-### 3.5 Discarded HL7 Validation Results
-- **Citations:** `hl7msghandel/hl7parser.py:29-33`, `hl7msghandel/hl7validator.py:40`
-- **Mechanism:**
-  ```python
-  # hl7msghandel/hl7parser.py:29-33
-  validate_hl7_message(hl7_message, message_direction)
-  return hl7_message
-  ```
-- **Architectural Impact:** `validate_hl7_message` returns a boolean, but `parse_hl7_message` never checks it. Even completely corrupt, invalid HL7 messages that fail validation are returned and processed by the system. Furthermore, line 40 of `hl7validator.py` (`hl7_message.segments(segment)[0]`) throws an `IndexError` whenever a segment is missing, relying on exception catching instead of defensive checks.
-
----
-
-## Category 4: Error Handling & Resilience Gaps
-
-### 4.1 Fatal Unhandled Startup Crash (`db_conn_fail_dialog` Undefined)
-- **Citations:** `gui/main_flet.py:116-121`
-- **Mechanism:**
-  ```python
-  try:
-      get_db_connection()
-  except Exception:
-      dialog = db_conn_fail_dialog(page, on_settings=show_settings_view)
-      page.overlay.append(dialog)
-      dialog.open = True
-      page.update()
-  ```
-- **Architectural Impact:** **CRITICAL RUNTIME CRASH.** `db_conn_fail_dialog` is never imported, defined, or implemented anywhere in the repository! If a user launches `main_flet.py` while SQL Server is offline, the application crashes instantly with `NameError: name 'db_conn_fail_dialog' is not defined`.
-
-### 4.2 Fatal Missing Import Crash in CSV Export (`HL7MessageParser`)
-- **Citations:** `gui/views/stream_controls.py:147-148`
-- **Mechanism:**
-  ```python
-  for msg in messages:
-      from gui.views.message_components import HL7MessageParser
-      parsed = HL7MessageParser.parse_hl7(msg['message'])
-  ```
-- **Architectural Impact:** **CRITICAL RUNTIME CRASH.** `HL7MessageParser` does not exist in `gui/views/message_components.py` (the actual class is named `MessageDataExtractor` with method `extract_display_data`). Every attempt by a laboratory user to export message logs to CSV crashes with `ImportError: cannot import name 'HL7MessageParser'`.
-
-### 4.3 Universal Exception Swallowing & Ambiguous Return Values
-- **Citations:** `database/sqlqueriesExe.py:84-91`
-- **Mechanism:**
-  ```python
-  except Exception as e:
-      log_error(f"Error executing query: {sql} with values: {values}. Error: {e}", source=SOURCE)
-      connection.rollback()
-      return None
-  ```
-- **Architectural Impact:** `querie_exe` catches all exceptions, rolls back, logs, and returns `None`. In SQL operations:
-  - For INSERT, UPDATE, DELETE: returns `None` on success (`sqlqueriesExe.py:82`) and `None` on catastrophic database failure (`sqlqueriesExe.py:91`). Callers have zero capability to verify whether data was written or lost.
-  - For SELECT: returns `None` if zero records exist, and `None` if the database host crashed.
-
-### 4.4 HTTP 200 Error-Masking Anti-Pattern
-- **Citations:** `api/app.py:138-149`
-- **Mechanism:** In `/server/start`:
+### 2.5 False HTTP 200 Success on Server Startup Failure
+- **Citations:** `api/app.py:231-242`
+- **Mechanism:** When `/server/start` encounters an error during `start_server()`:
   ```python
   except Exception as e:
       log_error(f"[API] Exception in /server/start: {e}")
       return {"message": f"Failed to start server: {e}"}
   ```
-- **Architectural Impact:** When server startup fails (e.g. port already in use), the API returns HTTP 200 OK with a failure string. `main.py:53` and `gui/api_methods.py:37, 78, 120` check `response.status_code == 200` and report the server as successfully running when it has actually failed.
+- **Architectural Impact:** Returns HTTP 200 OK. Clients inspecting `response.status_code == 200` assume the TCP server is running when it failed to bind or crashed. Furthermore, the unredacted raw exception `str(e)` is leaked to the client.
 
-### 4.5 Socket Disconnection on Single Frame Error
-- **Citations:** `server/client_handler.py:91-148`
-- **Mechanism:** The entire message reading loop is wrapped in a single `try...except Exception as e:`.
-- **Architectural Impact:** If a single message has an encoding error or corrupt character, the exception breaks the loop and reaches `writer.close()` at line 152. In clinical laboratory environments, medical analyzers do not tolerate dropped TCP sessions and will enter an error lockout state requiring manual operator restart.
+### 2.6 Fernet Key Concurrency Race Condition & Permissive ACLs
+- **Citations:** `setting/config.py:248-256`
+- **Mechanism:** `get_encryption_key()` checks `if os.path.exists(target_key_url):` without cross-process locking. If multiple processes launch concurrently on a clean system, both observe that `key.key` is missing, both generate distinct keys, and race to write `setting\key.key`. The second write overwrites the first, causing `InvalidToken` decryption crashes. Furthermore, `key.key` is created with default OS permissions rather than restricted user-only ACLs (`0o600`).
+
+### 2.7 Silent Lock Failure on `portalocker.Lock` Timeout
+- **Citations:** `setting/config.py:54-62`
+- **Mechanism:**
+  ```python
+  try:
+      lock = portalocker.Lock(path, timeout=timeout)
+      lock.acquire()
+  except Exception:
+      lock = None
+  try:
+      yield
+  ```
+  If lock acquisition times out after 5.0 seconds due to file contention, the exception is caught, `lock` is set to `None`, and the function **silently executes the critical section without holding the file lock**.
+- **Architectural Impact:** Completely breaks cross-process mutual exclusion guarantees. Multiple processes simultaneously read and write `config.json`, causing configuration corruption.
+
+### 2.8 Config Wipeout on Transient Read Error
+- **Citations:** `setting/config.py:333-335`
+- **Mechanism:**
+  ```python
+  existing_config = _load_config(config_url, encrypt_list, key_url)
+  if not existing_config:
+      existing_config = default_config_data.copy()
+  ```
+  If `_load_config()` fails due to transient file locking or a partial read, it returns `{}`. `save_config()` replaces it with `default_config_data.copy()`, permanently overwriting custom passwords, ports, and analyzer configurations with default factory values.
+
+### 2.9 Boolean String Casting Bug in `save_config`
+- **Citations:** `setting/config.py:346-347`
+- **Mechanism:**
+  ```python
+  config_data_to_save[key] = bool(value)
+  ```
+  In Python, `bool("False")` and `bool("0")` evaluate to `True`.
+- **Architectural Impact:** Passing `"AUTO_START_CBC_SERVER": "False"` or `"DARK_MODE": "False"` from configuration views or API endpoints sets the configuration values to `True`.
 
 ---
 
-## Category 5: Configuration, Secrets, & Security Vulnerabilities
+## Category 3: Protocol Edge Cases & Data Integrity (Rules 1 & 5)
 
-### 5.1 Protected Health Information (PHI) & PII Plaintext Logging
-- **Citations:** `database/sqlqueriesExe.py:39-41, 56, 73, 79-81, 86-89`, `hl7msghandel/hl7responder.py:154, 163, 175, 184`, `server/client_handler.py:50, 120`
-- **Mechanism:** Parameterized values and raw HL7 frames containing patient names, medical record numbers, dates of birth, and diagnostic results are logged in plaintext:
-  ```python
-  log_info(f"Executed SELECT query: {sql} with values: {values}", source=SOURCE)
-  log_info(f"CBC result for : {patient_name} saved succsesfully", source=SOURCE)
-  ```
-- **Security & Regulatory Impact:** Direct violation of HIPAA § 164.312, GDPR Art. 9, and ISO 27001 data protection standards. Anyone with read access to the `logs/` directory has full access to unencrypted clinical patient records.
-
-### 5.2 Pseudo-Encryption & Key Co-Location
-- **Citations:** `setting/config.py:25-26`, `setting/config.py:107-117`, `setting/config.py:159-168`
-- **Mechanism:**
-  - Fernet encryption is used to "encrypt" database credentials (`DB_USER`, `DB_PASSWORD`).
-  - The encryption key is derived via PBKDF2 with a random salt that is immediately discarded (`setting/config.py:109`), meaning the key is just 32 pseudo-random bytes.
-  - The key file `setting/key.key` is stored directly next to `setting/config.json` in the same local directory with standard file permissions.
-- **Security Impact:** Zero true confidentiality. Any process or attacker capable of reading `config.json` can read `key.key` and decrypt the database password instantaneously.
-
-### 5.3 Cleartext Password Revelation in GUI
-- **Citations:** `gui/views/settings.py:141-149`
+### 3.1 MLLP Standalone `\x1c` Deadlock on Live Sockets
+- **Citations:** `server/client_handler.py:129-134`
 - **Mechanism:**
   ```python
-  database_user = ft.TextField(..., password=True, can_reveal_password=True, value=cfg["DB_USER"])
-  database_password = ft.TextField(..., password=True, can_reveal_password=True, value=cfg["DB_PASSWORD"])
+  # If 0x1C is the very last byte in buffer, await next TCP chunk to determine
+  # if trailing \r (0x0D) is arriving, avoiding orphaned delimiter split (unless EOF reached)
+  if len(buffer) == end_pos + 1:
+      if not is_eof:
+          break
   ```
-- **Security Impact:** The production SQL Server password is loaded in plain text as a widget property and displays an eye toggle (`can_reveal_password=True`). Any staff member sitting in front of the laboratory workstation can reveal the central database credentials.
+  When an analyzer transmits a message ending in standalone `\x1c` (or if `\x1c` arrives at the end of a TCP packet while `\r` is delayed), the handler breaks out of the framing loop to wait for more data from `reader.read()`.
+- **Architectural Impact:** Half-duplex lab analyzers transmit the full message and immediately stop sending bytes, waiting for the server's ACK. Because the server is waiting for more bytes from the analyzer and the analyzer is waiting for the server's ACK, both endpoints enter an **unrecoverable protocol deadlock**.
 
-### 5.4 Complete Lack of API Authentication & CORS
-- **Citations:** `api/app.py:9-155`, `main.py:201-209`, `main.py:32`
-- **Mechanism:** When `API_IP` is configured to a non-loopback IP (e.g. LAN interface), FastAPI serves all endpoints without authentication (no Bearer token, API key, or session cookie).
-- **Security Impact:** Any unauthorized device on the laboratory network can read live patient data via `/server/messages`, connect to the WebSocket stream, or issue a POST to `/server/stop` to remotely shut down medical device communication.
+### 3.2 Outgoing Data Crash on `ACK^O02` (`None.encode()`)
+- **Citations:** `server/outcoming_data.py:18`, `server/client_handler.py:161-171`
+- **Mechanism:** When an analyzer acknowledges a patient demographic query, it sends `ACK^O02`. `hl7responder.py:89` processes this and returns `None` as the response string. In `client_handler.py:169`, `send_outgoing_data(writer, response)` is called with `response = None`.
+  In `server/outcoming_data.py:18`:
+  ```python
+  writer.write(response.encode())
+  ```
+- **Architectural Impact:** Calling `None.encode()` raises `AttributeError: 'NoneType' object has no attribute 'encode'`, crashing the connection handler and abruptly closing the TCP socket.
 
-### 5.5 Unbounded Memory Consumption in TCP Stream (DoS Vulnerability)
-- **Citations:** `server/client_handler.py:88-98`
-- **Mechanism:** `buffer = bytearray()` continually accumulates incoming chunks (`buffer.extend(data)`).
-- **Security Impact:** If a client or malicious actor sends an endless stream of bytes without sending `MESSAGE_END_MARKER` (`0x1C`), the buffer expands indefinitely until the process exhausts available RAM and crashes with an `OutOfMemoryError`.
+### 3.3 Silent Exception Suppression in Incoming Data Pipeline (Rule 5 Violation)
+- **Citations:** `server/incoming_data.py:28-35`, `server/client_handler.py:161, 172-176`
+- **Mechanism:** In `server/incoming_data.py`:
+  ```python
+  def _process_incoming_data_sync(message):
+      try:
+          ...
+      except Exception as e:
+          log_error(f"Error processing incoming data: {e}", source=SOURCE)
+          return None
+  ```
+  When parsing, validation, or database execution fails, `_process_incoming_data_sync` catches the exception and returns `None`.
+  In `client_handler.py:161`:
+  ```python
+  if handel_response is not None:
+      ...
+  else:
+      log_info(f"No response generated for {client_address}", source=SOURCE)
+  ```
+- **Architectural Impact:** No exception is raised in `client_handler.py`, so the NAK generation block (`client_handler.py:187-198`) is never reached. The server sends **neither ACK nor NAK**, violating Rule 5. The analyzer hangs until its internal timeout expires and disconnects.
+
+### 3.4 Unconditional Destruction of `MANUAL` Data (Silent Clinical Data Loss)
+- **Citations:** `hl7msghandel/hl7fitsql.py:39-46`, `hl7msghandel/hl7fitsql.py:60-65`
+- **Mechanism:**
+  ```python
+  elif value == "MANUAL":
+      try:
+          if manual_data is not None:
+              result_dictionary[key] = manual_data[key]
+          result_dictionary_deleted_list.append(key) # UNCONDITIONAL DELETION
+      except Exception as e:
+          ...
+  for result in result_dictionary_deleted_list:
+      del result_dictionary[result]
+  ```
+- **Architectural Impact:** When manual test entries (e.g. manual leukocyte differentials: `EOSINOPHIL`, `BASOPHIL`, `BAND`, `BLAST`) are supplied via `manual_data`, they are assigned to `result_dictionary` and then **immediately deleted**. Manual test results can never be persisted to the database.
+
+### 3.5 Missing SQL Keys Insert Literal `"SQL"` String into Database
+- **Citations:** `hl7msghandel/hl7fitsql.py:31-38`
+- **Mechanism:**
+  ```python
+  if value == "SQL":
+      try:
+          if sql_data is not None:
+              result_dictionary[key] = sql_data[key]
+      except Exception as e:
+          log_error(f"Error updating sql dictionary: {e}", source=SOURCE)
+  ```
+  If `sql_data` is `None` or missing the key, the key is left with its initial dictionary value: the literal string `"SQL"`.
+- **Architectural Impact:** In `database/sqlqueries.py`, the literal string `"SQL"` is bound as an SQL parameter and inserted into SQL Server datetime or integer columns, causing query execution failures.
+
+### 3.6 HL7 Segment Separator Normalization Failure
+- **Citations:** `hl7msghandel/hl7parser.py:23`
+- **Mechanism:** `python-hl7` splits segments strictly on `\r`. If an instrument or gateway sends `\r\n` (CRLF), the `\n` is prepended to subsequent segment tags (e.g. `\nPID`). Segment queries (`msg.segments("PID")`) fail with `KeyError`. If the message uses Unix `\n` (LF), the entire message collapses into a single segment.
+- **Architectural Impact:** Analyzers transmitting standard network CRLF or Unix LF segments fail parsing.
+
+### 3.7 Ignored HL7 Validation Results
+- **Citations:** `hl7msghandel/hl7parser.py:29-33`
+- **Mechanism:**
+  ```python
+  validate_hl7_message(hl7_message, message_direction)
+  return hl7_message
+  ```
+  The boolean return value of `validate_hl7_message` is discarded. Corrupt or malformed messages are returned as valid.
+
+### 3.8 Missing Bounds Checks and Crash Vectors in Responder
+- **Citations:** `hl7msghandel/hl7responder.py:43, 63`, `hl7msghandel/hl7responder.py:225`
+- **Mechanism:**
+  1. `if len(hl7_msh) <= 8: raise ValueError(...)`: If MSH has 9 or 10 fields, accessing `hl7_msh[9]` or `hl7_msh[10]` crashes with `IndexError`.
+  2. `patient_id = hl7_message.segments("ORC")[0][3]`: Crashes with `KeyError` if `ORC` is missing, or `IndexError` if fewer than 4 fields exist.
+
+### 3.9 Delimiter Injection in Outbound Order Responses
+- **Citations:** `hl7msghandel/hl7responder.py:336`
+- **Mechanism:**
+  ```python
+  order_response = f"MSH|^~\\&|...PID|1||{patient_id}|{patient_name}|{patient_birth_date}|{patient_sex}..."
+  ```
+  Database variables (`patient_name`, `patient_id`) are interpolated directly into the HL7 message string without sanitizing or escaping delimiter characters (`|`, `^`, `~`, `\`, `&`).
+- **Architectural Impact:** If a patient name contains a caret (e.g. `DOE^JOHN`) or pipe, the HL7 structure is corrupted, causing analyzer parsing errors.
 
 ---
 
-## Category 6: Testability, Observability, & Technical Debt
+## Category 4: Concurrency, Thread Safety & Resource Lifecycle (Rules 2 & 7)
 
-### 6.1 Total Absence of GUI Test Coverage
-- **Citations:** `tests/` directory
-- **Diagnostic:** There are **zero unit, integration, or visual regression tests** for `gui/` (over 50% of the entire codebase). Critical user-facing features like CSV export, CBC report generation, patient pagination, and database configuration dialogs have never been exercised by automated testing.
+### 4.1 Unconstrained Connection Creation in `ConnectionPool`
+- **Citations:** `database/sqlconnection.py:63-68`, `database/sqlconnection.py:90-116`
+- **Mechanism:** `ConnectionPool` configures `max_connections = 10`. However, in `get_connection()`:
+  ```python
+  while not self._pool.empty():
+      # acquire idle connection...
+  # Pool is empty or all checked connections were stale: create a new connection
+  conn = self._create_raw_connection()
+  ```
+  There is **no check against `max_connections`**, **no semaphore**, and **no wait timeout**.
+- **Architectural Impact:** Under concurrent load, the pool spawns unlimited physical ODBC connections to SQL Server, exhausting database worker threads and client ephemeral ports.
 
-### 6.2 Fragile and Deceptive Backend Tests
-- **Citations:** `tests/conftest.py:5-6`, `tests/hl7msghandel/test_hl7responder.py:9-35`, `tests/hl7msghandel/test_hl7parser.py:11`
-- **Diagnostic:**
-  - `conftest.py` globally mocks `sys.modules["pyodbc"] = MagicMock()`, completely preventing real integration tests against SQL Server.
-  - In `test_hl7responder.py:9-35`, the test suite manually injects 14 missing module-level attributes into `hl7responder` via `setattr()` because the module was improperly structured to run under pytest.
-  - In `test_hl7parser.py:11`, `validate_hl7_message` is mocked to return `True`, masking the fact that the validator contains fatal index bugs.
+### 4.2 Desynchronized `_active_count` and Double-Release Aliasing
+- **Citations:** `database/sqlconnection.py:99-100, 107-108, 129-130, 137-138, 154-155`
+- **Mechanism:**
+  1. Acquiring an existing connection from `_pool.get_nowait()` does not increment `_active_count`, while releasing a connection does not decrement it. `_active_count` fails to represent either checked-out connections or total connections.
+  2. `release_connection(conn)` does not check if `conn` is already in `self._pool`. If released twice, the same connection instance is placed in the queue twice. Two concurrent worker threads receive the same `Connection` object, triggering fatal PyODBC concurrency errors (`HY000 Connection is busy with results for another command`).
 
-### 6.3 Third-Party Logging Format String Crash Risk
-- **Citations:** `log/log_config.py:44-46`
+### 4.3 Connection Leak via Raw `get_db_connection()`
+- **Citations:** `database/sqlconnection.py:187-205`, `database/db_schema.py:27`, `database/db_schema.py:94-96`
+- **Mechanism:** In `db_schema.py`:
+  ```python
+  connection = get_db_connection()
+  ...
+  finally:
+      if connection:
+          connection.close()
+  ```
+  `connection.close()` bypasses `_global_pool.release_connection()`. The pool is never notified that the connection was closed.
+
+### 4.4 Missing `pyodbc.InterfaceError` Eviction
+- **Citations:** `database/sqlconnection.py:179-184`
 - **Mechanism:**
   ```python
-  formatter = logging.Formatter(
-      "%(asctime)s - %(name)s - %(levelname)s - [%(source)s] - %(message)s"
-  )
+  except (pyodbc.OperationalError, pyodbc.DatabaseError, ConnectionError):
+      discard = True
+      raise
   ```
-- **Diagnostic:** The formatter mandates `%(source)s`. While `log/logger.py` supplies `extra={"source": source}`, any standard library or framework log (Uvicorn, Starlette, AnyIO, PyODBC) that logs to the root logger without `source` in `extra` will crash with a formatting `KeyError: 'source'`.
+  In PyODBC, `pyodbc.InterfaceError` inherits directly from `pyodbc.Error`, **not** from `pyodbc.DatabaseError`. When a TCP socket disconnects as an `InterfaceError`, `discard` remains `False`, and the broken connection is recycled into the pool.
+
+### 4.5 Half-Open Socket Leak (Missing Read Inactivity Timeout)
+- **Citations:** `server/client_handler.py:94`
+- **Mechanism:** `data = await reader.read(BUFFER_SIZE_LIMIT)` has no `asyncio.wait_for` timeout and no `SO_KEEPALIVE` configured.
+- **Architectural Impact:** When an analyzer loses power or disconnects silently, the coroutine hangs indefinitely. File descriptors and client entries in `clients` leak permanently.
+
+### 4.6 Blocking Socket Bind/DNS Directly on Main Event Loop (Rule 2)
+- **Citations:** `server/server.py:23-46, 164`
+- **Mechanism:** `start_server()` invokes `check_server_start_capability()` directly on the active event loop without `asyncio.to_thread`. This performs synchronous socket creation, DNS resolution, and `bind()`, freezing the asyncio event loop during network latency.
+
+### 4.7 Abrupt Child Process Force-Kill on Windows
+- **Citations:** `main.py:386-398`, `main.py:400-403`
+- **Mechanism:** On Windows, `proc.terminate()` executes the Win32 API `TerminateProcess(hProcess, 1)`.
+- **Architectural Impact:** Child processes (`fastapi_process`, `flet_process`) are abruptly killed without executing `finally:` blocks, `atexit` handlers, Uvicorn lifespan shutdown, or database connection pool cleanups.
+
+### 4.8 UI Thread Safety Violations in Desktop Views
+- **Citations:**
+  - `gui/views/message_components.py:639-648`: Spawns a raw OS `threading.Thread` that sleeps 2s and invokes `page.update()` directly outside the asyncio event loop.
+  - `gui/views/stream_controls.py:96-103` & `gui/views/stream.py:142-164`: `SearchBar` starts a `threading.Timer(0.3, trigger)` which calls `self.update()` on the background timer thread.
+  - `gui/views/settings.py:45`: Synchronous DB test blocks the UI thread for 15–30s on unreachable networks.
 
 ---
 
-## Diagnostic Summary Matrix
+## Category 5: Database Transactions, SQL Binding & Server Compatibility
 
-| Finding | Severity | Category | Primary Affected Files |
-| :--- | :--- | :--- | :--- |
-| **In-place Schema Mutation (Data Loss)** | **CRITICAL** | Data / Modularity | `database/sqlqueries.py:42, 95` |
-| **Undefined Dialog Crash (`db_conn_fail_dialog`)** | **CRITICAL** | Error Handling | `gui/main_flet.py:118` |
-| **Missing Import Crash in CSV Export** | **CRITICAL** | Error Handling | `gui/views/stream_controls.py:147` |
-| **Event Loop Freeze (`response_queue.get`)** | **CRITICAL** | Concurrency | `server/incoming_data.py:45` |
-| **PHI / PII Plaintext Logging** | **CRITICAL** | Security | `database/sqlqueriesExe.py:39-41`, `hl7responder.py:154` |
-| **Zero Connection Pooling (Socket Thrashing)** | **HIGH** | Persistence | `database/sqlconnection.py:71`, `sqlqueriesExe.py:25, 96` |
-| **Universal Exception Swallowing (`None`)** | **HIGH** | Error Handling | `database/sqlqueriesExe.py:84-91` |
-| **Corrupted String Insertion on Missing Field** | **HIGH** | Data Integrity | `hl7msghandel/hl7fitsql.py:54-58`, `sqlqueries.py:48` |
-| **Shutdown Task Mutation Bug (Orphan Sockets)**| **HIGH** | Concurrency | `server/server.py:113-118, 158` |
-| **Socket Drop on Single Frame Error** | **HIGH** | Resilience | `server/client_handler.py:91-155` |
-| **Unbounded Buffer Allocation (DoS / OOM)** | **HIGH** | Security | `server/client_handler.py:88-98` |
-| **Dynamic Port TOCTOU Race Condition** | **HIGH** | Concurrency | `main.py:13-22`, `server/server.py:35-44` |
-| **Cleartext DB Password Display in UI** | **MEDIUM** | Security | `gui/views/settings.py:141-149` |
-| **Unauthenticated API & Missing CORS** | **MEDIUM** | Security | `api/app.py:9-155` |
-| **Discarded HL7 Validation Return Value** | **MEDIUM** | Data Validation | `hl7msghandel/hl7parser.py:29-33` |
-| **Total Absence of GUI Test Coverage** | **MEDIUM** | Testability | `tests/`, `gui/views/*` |
-| **Non-Compliant MLLP Frame Slicing** | **MEDIUM** | Protocol | `server/client_handler.py:24-25, 112` |
-| **Third-Party Log Formatting Crash (`KeyError`)**| **LOW** | Observability | `log/log_config.py:44-46` |
-| **Dead Code (`report.py`, `settings.py`)** | **LOW** | Technical Debt | `gui/views/report.py:1-14`, `gui/views/settings.py:5-7` |
+### 5.1 Stored Procedure DML Rollback with `expect_results=True`
+- **Citations:** `database/sqlqueriesExe.py:51-74`, `database/sqlconnection.py:121-125`
+- **Mechanism:** When executing stored procedures that return results (`expect_results=True`), `querie_exe` does not execute `connection.commit()`. When `get_db_connection_context()` releases the connection, `release_connection` executes `conn.rollback()`.
+- **Architectural Impact:** If a stored procedure performs any INSERT/UPDATE/DELETE operations and also returns a result set, **all changes are unconditionally rolled back**.
 
+### 5.2 Silent Exception Swallowing in `querie_exe`
+- **Citations:** `database/sqlqueriesExe.py:93-107`, `database/sqlqueries.py:62, 127`
+- **Mechanism:**
+  ```python
+  except Exception as e:
+      ...
+      if isinstance(e, (pyodbc.OperationalError, ConnectionError)):
+          raise
+      return None
+  ```
+  `pyodbc.IntegrityError`, `ProgrammingError`, and `DataError` are caught, rolled back, and swallowed, returning `None`.
+- **Architectural Impact:** Callers cannot distinguish between successful queries and failed queries. In `hl7responder.py:164-167`, the server sends an ACK claiming success even when database insertion failed and clinical data was lost.
+
+### 5.3 `None` Parameter Binding in WHERE Clauses Evaluates to UNKNOWN
+- **Citations:** `database/sqlqueries.py:110-123`, `database/sqlqueries.py:166-178`, `database/sqlqueries.py:213-223`
+- **Mechanism:** In `data_update_for`, `data_select_for`, and `data_delete_for`:
+  ```python
+  condition_strings = [f"{value} = ?" for key, value in condition.items()]
+  ```
+  When condition values are `None`, PyODBC executes `WHERE [patientid] = NULL`. In SQL Server (`ANSI_NULLS ON`), comparing `= NULL` evaluates to `UNKNOWN` (falsy), updating or deleting 0 rows silently.
+
+### 5.4 Indiscriminate `str()` Conversion Forcing `CONVERT_IMPLICIT`
+- **Citations:** `database/sqlqueries.py:50-54`, `database/sqlqueries.py:100-104`
+- **Mechanism:** All parameter values are unconditionally coerced to strings (`str(hl7_column[value])`).
+- **Architectural Impact:** PyODBC binds all parameters as `VARCHAR`/`NVARCHAR`. SQL Server is forced to apply `CONVERT_IMPLICIT` on integer and floating point columns, preventing index seeks and degrading query performance.
+
+### 5.5 Empty Column Mapping Generates Invalid SQL Syntax
+- **Citations:** `database/sqlqueries.py:40-59`, `database/sqlqueries.py:91-123`
+- **Mechanism:** If an incoming HL7 message has no keys matching the schema, `column_name` is empty `{}`.
+  Generated SQL: `INSERT INTO [dbo].[cbc] () VALUES ();`.
+
+### 5.6 Datetime Truncation via `BETWEEN` in `GetPatientInfo.sql`
+- **Citations:** `Sql_reqirement_querys/Reallab/GetPatientInfo.sql:74-77`
+- **Mechanism:** `BETWEEN @StartDate AND @EndDate` truncates `@EndDate = '2026-11-14'` to `'2026-11-14 00:00:00'`, excluding all tests performed on the end date after midnight.
+
+### 5.7 Missing Unique Constraint & Race Condition in `SendOutLog`
+- **Citations:** `Sql_reqirement_querys/Reallab/InsertSendOutLog.sql:17-22`, `CreateSendOutLog.sql:1-14`
+- **Mechanism:** `SendOutLog` has only a primary key on `LogID`. Concurrent queries pass `IF NOT EXISTS` and insert duplicate rows for `(PatientID, TestName)`.
+
+---
+
+## Category 6: Desktop Presentation & Flet Lifecycle
+
+### 6.1 Deprecated Flet 0.26 / 1.0+ Properties
+- **Citations:** `gui/components.py:62-63`, `gui/views/patient.py:353, 373`, `gui/views/send_out.py:162, 401`, `gui/views/settings.py:48`
+- **Mechanism:** Views assign to deprecated properties: `page.snack_bar = ft.SnackBar(...)` and `page.splash = ft.ProgressBar(...)`. Modern Flet requires `page.open(snack)` and progress overlays.
+
+### 6.2 Monolithic View Functions (>450 Lines)
+- **Citations:** `gui/views/cbc_report.py:40-555` (`save_report_as_html` is 459 lines), `gui/views/send_out.py:102-334` (`create_send_out_row` is 232 lines).
+- **Architectural Impact:** Deeply nested closures and mixed responsibilities (HTML generation, SVG file loading, CSS formatting, and DB mapping) make maintenance and testing impossible.
+
+### 6.3 Message Deduplication Bug in Stream
+- **Citations:** `gui/views/stream.py:592-598`
+- **Mechanism:** Message uniqueness is verified solely against `msg["timestamp"]`. When analyzers send multiple messages within the same second, subsequent messages are silently dropped from the UI.
+
+### 6.4 Client-Side Unpaged Table Memory Accumulation
+- **Citations:** `gui/views/patient.py:207`, `gui/views/send_out.py:441`
+- **Mechanism:** Searches pull the entire matching dataset into client RAM without database pagination (`OFFSET`/`FETCH`). Datasets with 50,000 records consume hundreds of megabytes in client memory.
+
+---
+
+## Category 7: Build, Packaging & Dependency Omissions
+
+### 7.1 Missing Runtime Dependencies in Configuration Files
+- **Citations:** `pyproject.toml`, `requirements.txt`
+- **Omissions:** `portalocker` (imported in `setting/config.py:11`) and `websockets` (imported in `gui/api_methods.py:351`) are omitted from `requirements.txt` and `pyproject.toml`.
+
+### 7.2 Missing PyInstaller Hidden Imports
+- **Citations:** `build.py:32-42`
+- **Omissions:** `portalocker`, `concurrent_log_handler`, and Uvicorn runtime submodules (`uvicorn.loops.auto`, `uvicorn.protocols.http.auto`, etc.) are missing from `--hidden-import`, causing PyInstaller standalone builds to crash on startup.
+
+### 7.3 Relative Path Resolution Failure in PyInstaller Frozen Mode
+- **Citations:** `main.py:76`, `setting/config.py:78-79`
+- **Mechanism:** Bundled assets and keys are referenced as relative paths (`assets`, `setting\key.key`) instead of resolving against `sys._MEIPASS`.
+
+---
+
+## Category 8: Test Suite Blind Spots
+
+1. **GUI Presentation Layer (0% Coverage on 14 of 16 modules):** Only 9 of 96 tests cover GUI code. `gui/main_flet.py`, `gui/api_methods.py`, `dashboard.py`, `send_out.py`, `settings.py`, and `cbc_report.py` have 0% automated test coverage.
+2. **Process Lifecycle (0% Coverage on `main.py`):** Zero tests verify dynamic port allocation retry, process termination, signal handling, or database configuration modal loops.
+3. **Connection Pooling & Concurrency:** Zero multi-threaded tests verify pool behavior under saturation, connection timeouts, or broken interface eviction.
+4. **Asserting Buggy Behavior:** `tests/hl7msghandel/test_hl7fitsql.py:43` asserts that `MANUAL` fields are deleted from dictionary outputs rather than verifying retention.

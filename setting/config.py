@@ -17,7 +17,7 @@ from typing import Dict, Any, List
 
 
 SOURCE = "Config"
-_config_lock = threading.Lock()
+_config_lock = threading.RLock()
 LOCK_URL = r"setting\config.lock"
 
 
@@ -245,15 +245,16 @@ def get_encryption_key(key_url: str = None) -> bytes:
         except OSError:
             pass
 
-    if os.path.exists(target_key_url):
-        with open(target_key_url, "rb") as file:
-            return file.read().strip()
-    else:
-        log_info("Key file not found. Generating new secure key.", source=SOURCE)
-        key = generate_secure_key()
-        with open(target_key_url, "wb") as file:
-            file.write(key)
-        return key
+    with _config_file_lock():
+        if os.path.exists(target_key_url):
+            with open(target_key_url, "rb") as file:
+                return file.read().strip()
+        else:
+            log_info("Key file not found. Generating new secure key.", source=SOURCE)
+            key = generate_secure_key()
+            with open(target_key_url, "wb") as file:
+                file.write(key)
+            return key
 
 
 def _load_config(
@@ -344,7 +345,7 @@ def save_config(config_data_to_save: Dict[str, Any], config_url: str = CONFIG_UR
                         elif target_type == float:
                             config_data_to_save[key] = float(value)
                         elif target_type == bool:
-                            config_data_to_save[key] = bool(value)
+                            config_data_to_save[key] = str(value).lower() in ("true", "1", "yes")
                     except (ValueError, TypeError) as e:
                         log_error(f"Type conversion error for {key}: {e}", source=SOURCE)
                         continue

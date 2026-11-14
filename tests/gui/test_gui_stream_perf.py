@@ -113,12 +113,33 @@ def test_overlay_dialog_cleanup():
 
     # Trigger clear messages confirmation dialog
     toolbar._on_clear_messages(None)
-    assert len(mock_page.overlay) == 1
-    dialog = mock_page.overlay[0]
+    mock_page.open.assert_called_once()
+    dialog = mock_page.open.call_args[0][0]
+    assert dialog.title.value == "Clear Messages"
 
     # Click Cancel on the dialog
     cancel_button = dialog.actions[0]
     cancel_button.on_click(None)
 
-    # Dialog should be evicted from overlay
+    # Dialog should be closed via page.close
+    mock_page.close.assert_called_once_with(dialog)
+
+
+def test_overlay_dialog_cleanup_fallback():
+    # Legacy fallback: page without open/close methods
+    mock_page = MagicMock(spec=["overlay", "update"])
+    mock_page.overlay = []
+
+    from gui.views.stream_controls import StreamToolbar
+
+    mock_theme = MagicMock()
+    toolbar = StreamToolbar(mock_page, mock_theme, on_clear_messages=lambda: None)
+
+    toolbar._on_clear_messages(None)
+    assert len(mock_page.overlay) == 1
+    dialog = mock_page.overlay[0]
+
+    cancel_button = dialog.actions[0]
+    cancel_button.on_click(None)
+
     assert len(mock_page.overlay) == 0

@@ -76,13 +76,17 @@ def run_flet():
     _run_flet_app(flet_main, assets_dir="assets")
 
 
-def wait_for_fastapi_server(api_ip, initial_port=None, timeout=15, interval=0.5):
+def wait_for_fastapi_server(api_ip, initial_port=None, timeout=15, interval=0.5, proc=None):
     """
     Wait until the FastAPI server is available at /server/status, dynamically reading the port from config.
-    Returns True if available, False if timeout is reached.
+    Returns True if available, False if timeout is reached or child process died.
     """
     start_time = time.time()
     while time.time() - start_time < timeout:
+        if proc is not None and not proc.is_alive():
+            log_error("FastAPI child process terminated unexpectedly during startup.")
+            return False
+
         current_cfg = get_config()
         current_port = current_cfg.get("API_PORT", initial_port)
         current_ip = current_cfg.get("API_IP", api_ip)
@@ -396,9 +400,34 @@ def main():
             except Exception as ex:
                 log_error(f"Error terminating {name}: {ex}")
 
+    _cleanup_done = False
+
     def cleanup_all():
-        terminate_process(fastapi_process, "FastAPI server")
-        terminate_process(flet_process, "Flet GUI")
+        nonlocal _cleanup_done
+        if _cleanup_done:
+            return
+        _cleanup_done = True
+
+        # Signal graceful shutdown to TCP server via API before force-killing
+        try:
+            cfg_now = get_config()
+            curr_port = cfg_now.get("API_PORT", port)
+            curr_ip = cfg_now.get("API_IP", api_ip)
+            from setting.config import get_api_token
+            curr_token = get_api_token()
+            try:
+                httpx.post(
+                    f"http://{curr_ip}:{curr_port}/server/stop",
+                    headers={"X-Internal-Token": curr_token},
+                    timeout=1.0,
+                )
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+        terminate_process(fastapi_process, "FastAPI server", timeout=2.0)
+        terminate_process(flet_process, "Flet GUI", timeout=2.0)
 
     atexit.register(cleanup_all)
 
@@ -415,7 +444,7 @@ def main():
 
     # Wait for FastAPI server to be ready, then start CBC server if enabled
     if cfg.get("AUTO_START_CBC_SERVER", True):
-        if wait_for_fastapi_server(api_ip, initial_port=port):
+        if wait_for_fastapi_server(api_ip, initial_port=port, proc=fastapi_process):
             try:
                 log_info(
                     "Attempting to auto start CBC server (calling start_server)..."

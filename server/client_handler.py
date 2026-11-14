@@ -1,3 +1,4 @@
+import asyncio
 from server.incoming_data import handle_incoming_data
 from server.outcoming_data import send_outgoing_data
 from log.logger import log_info, log_error, redact_hl7_text
@@ -86,12 +87,26 @@ async def handle_client_connection(reader, writer):
     clients_with_names.update({client_address: None})
     clients[client_address] = writer
 
+    # Enable TCP keepalive if supported by platform socket
+    try:
+        raw_sock = writer.get_extra_info("socket")
+        if raw_sock:
+            import socket
+            raw_sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    except Exception:
+        pass
+
     buffer = bytearray()
 
     try:
         while True:
-            # Read incoming stream bytes
-            data = await reader.read(BUFFER_SIZE_LIMIT)
+            # Read incoming stream bytes with 300s inactivity timeout to reclaim half-open sockets
+            try:
+                data = await asyncio.wait_for(reader.read(BUFFER_SIZE_LIMIT), timeout=300.0)
+            except asyncio.TimeoutError:
+                log_info(f"Client {client_address} idle read timeout reached. Closing connection.", source=SOURCE)
+                break
+
             is_eof = not data
             if data:
                 buffer.extend(data)
@@ -126,11 +141,17 @@ async def handle_client_connection(reader, writer):
                     # Frame is fragmented across TCP packets; await more data
                     break
 
-                # If 0x1C is the very last byte in buffer, await next TCP chunk to determine
-                # if trailing \r (0x0D) is arriving, avoiding orphaned delimiter split (unless EOF reached)
-                if len(buffer) == end_pos + 1:
-                    if not is_eof:
-                        break
+                # If 0x1C is the very last byte in buffer, check if trailing \r (0x0D) arrives in next TCP chunk.
+                # Use a bounded wait (100ms) to avoid protocol deadlock when an analyzer sends standalone \x1c.
+                if len(buffer) == end_pos + 1 and not is_eof:
+                    try:
+                        more_data = await asyncio.wait_for(reader.read(BUFFER_SIZE_LIMIT), timeout=0.1)
+                        if more_data:
+                            buffer.extend(more_data)
+                        else:
+                            is_eof = True
+                    except asyncio.TimeoutError:
+                        pass
 
                 # Determine end delimiter length (standard \x1c\r or standalone \x1c, plus optional \n)
                 delimiter_len = 1
@@ -158,7 +179,7 @@ async def handle_client_connection(reader, writer):
                     # Asynchronously process incoming HL7 data
                     handel_response = await handle_incoming_data(message)
 
-                    if handel_response is not None:
+                    if handel_response is not None and handel_response[0] is not None:
                         response = handel_response[0]
                         if handel_response[1]:
                             clients_with_names.update({client_address: handel_response[1]})
@@ -169,6 +190,8 @@ async def handle_client_connection(reader, writer):
                         result = send_outgoing_data(writer, response)
                         if hasattr(result, "__await__"):
                             await result
+                    elif handel_response is not None and handel_response[1]:
+                        clients_with_names.update({client_address: handel_response[1]})
                     else:
                         log_info(
                             f"No response generated for {client_address}",

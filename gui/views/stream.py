@@ -205,19 +205,11 @@ class DevicePanel(ft.Container):
         self._show_snackbar("Copied to clipboard")
     
     def _show_snackbar(self, message: str, error: bool = False):
-        """Show a snackbar notification with overlay pruning to prevent memory leaks."""
-        if self._page_ref and hasattr(self._page_ref, "overlay"):
-            self._page_ref.overlay = [
-                ctrl for ctrl in self._page_ref.overlay if not isinstance(ctrl, ft.SnackBar)
-            ]
-            snackbar = ft.SnackBar(
-                content=ft.Text(message),
-                bgcolor=self.theme.color_scheme.error if error else self.theme.color_scheme.primary,
-                duration=3000
-            )
-            self._page_ref.overlay.append(snackbar)
-            snackbar.open = True
-            self._page_ref.update()
+        """Show a snackbar notification safely without overlay mutation."""
+        if self._page_ref:
+            from gui.components import show_snack_bar
+            bgcolor = self.theme.color_scheme.error if error else self.theme.color_scheme.primary
+            show_snack_bar(self._page_ref, message, bgcolor=bgcolor)
     
     def update_messages(self, messages: list):
         """Update the message list with incremental rendering and bounded buffer."""
@@ -588,13 +580,14 @@ class StreamPage(ft.Column):
                     device_name = device_msgs[-1]["client_name"]
                     panel_info = self._get_device_panel(device_name, client_address)
                     
-                    # Only add truly new messages
-                    existing_timestamps = set(
-                        msg["timestamp"] for msg in panel_info.panel.messages
+                    # Only add truly new messages (composite key to avoid dropping subsecond messages like IN/OUT pairs)
+                    existing_keys = set(
+                        (msg.get("timestamp"), msg.get("direction"), msg.get("message"))
+                        for msg in panel_info.panel.messages
                     )
                     new_msgs = [
                         msg for msg in device_msgs 
-                        if msg["timestamp"] not in existing_timestamps
+                        if (msg.get("timestamp"), msg.get("direction"), msg.get("message")) not in existing_keys
                     ]
                     
                     if new_msgs:

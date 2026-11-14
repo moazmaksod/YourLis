@@ -332,23 +332,19 @@ class StreamToolbar(ft.Container):
     
     def _on_clear_messages(self, e):
         """Handle clear messages button click."""
-        if self.on_clear_messages_callback:
+        if self.on_clear_messages_callback and self._page_ref:
+            page = self._page_ref
+            from gui.components import show_dialog, dismiss_dialog
+
             # Show confirmation dialog
             def close_dialog(e):
-                dialog.open = False
-                if self._page_ref and dialog in self._page_ref.overlay:
-                    self._page_ref.overlay.remove(dialog)
-                if self._page_ref:
-                    self._page_ref.update()
-            
+                dismiss_dialog(page, dialog)
+
             def confirm_clear(e):
-                dialog.open = False
-                if self._page_ref and dialog in self._page_ref.overlay:
-                    self._page_ref.overlay.remove(dialog)
-                if self._page_ref:
-                    self._page_ref.update()
-                self.on_clear_messages_callback()
-            
+                dismiss_dialog(page, dialog)
+                if self.on_clear_messages_callback:
+                    self.on_clear_messages_callback()
+
             dialog = ft.AlertDialog(
                 modal=True,
                 title=ft.Text("Clear Messages"),
@@ -360,16 +356,13 @@ class StreamToolbar(ft.Container):
                         on_click=confirm_clear,
                         style=ft.ButtonStyle(
                             color=self.theme.color_scheme.error
-                        )
+                        ),
                     ),
                 ],
                 actions_alignment=ft.MainAxisAlignment.END,
             )
-            
-            if self._page_ref:
-                self._page_ref.overlay.append(dialog)
-                dialog.open = True
-                self._page_ref.update()
+
+            show_dialog(page, dialog)
     
     def get_search_query(self) -> str:
         """Get current search query."""

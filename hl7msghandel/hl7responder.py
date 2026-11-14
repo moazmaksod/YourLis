@@ -312,6 +312,13 @@ def generate_nak_response(
     return nak_message
 
 
+def _sanitize_hl7_field(value):
+    """Sanitizes field values to prevent HL7 segment corruption or framing injection."""
+    if value is None:
+        return ""
+    return str(value).replace("\r", " ").replace("\n", " ").replace("\x1c", "").replace("\x0b", "").strip()
+
+
 def generate_order_response(msg_id, patient_info: dict):
     """
     Generates a sample order response for ORM^O01 messages.
@@ -325,13 +332,12 @@ def generate_order_response(msg_id, patient_info: dict):
     msg_type = "ORR^O02"
 
     try:
-
-        # access patient name from ORC segment order request mesage
-        patient_id = patient_info["PATIENT_ID"]
-        patient_name = patient_info["NAME"]
-        patient_sex = patient_info["SEX"]
-        patient_age = patient_info["AGE"]
-        patient_age_unit = patient_info["AGE_UNIT"]
+        # access patient info and sanitize delimiters
+        patient_id = _sanitize_hl7_field(patient_info.get("PATIENT_ID", "")).replace("|", "")
+        patient_name = _sanitize_hl7_field(patient_info.get("NAME", "")).replace("|", "/")
+        patient_sex = _sanitize_hl7_field(patient_info.get("SEX", "")).replace("|", "")
+        patient_age = _sanitize_hl7_field(patient_info.get("AGE", "")).replace("|", "")
+        patient_age_unit = _sanitize_hl7_field(patient_info.get("AGE_UNIT", "")).replace("|", "")
 
         response_message = f"\x0bMSH|^~\\&|{APPLICATION_NAME}|{VERSION}|||{time_now()}||{msg_type}|{msg_id}|P|2.3.1|||||CHA|UTF-8|||\rMSA|AA|{msg_id}||||0|\rPID|1||{patient_id}|{patient_name}|{patient_name}|||{patient_sex}|||||||||||||||||||||||\rPV1|1||||||||||||||||||||||||||||||||||||||||||||||||||||\rORC|AF|{patient_id}|||||||||||||||||||||||\rOBR|1|||||||||||||||||||||||||||||||Genrui||||||||||||||\rOBX|2|IS|^Blood Mode^||WH||||||F|||||||\rOBX|3|IS|^Test Mode^||CBC||||||F|||||||\rOBX|5|IS|^Age^||{patient_age}|{patient_age_unit}|||||F|||||||\r\x1c\r"
 

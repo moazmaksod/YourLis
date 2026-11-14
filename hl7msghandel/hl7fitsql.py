@@ -31,19 +31,24 @@ def update_hl7_dictionary(hl7_message, hl7_dictionary, sql_data=None, manual_dat
         if value == "SQL":
             try:
                 # Update the result dictionary with SQL data if provided
-                if sql_data is not None:
+                if sql_data is not None and key in sql_data:
                     result_dictionary[key] = sql_data[key]
+                else:
+                    result_dictionary[key] = None
             except Exception as e:
                 log_error(f"Error updating sql dictionary: {e}", source=SOURCE)
+                result_dictionary[key] = None
 
         elif value == "MANUAL":
             try:
-                # Update the result dictionary with manual data if provided
-                if manual_data is not None:
+                # Update the result dictionary with manual data if provided; omit key if not provided
+                if manual_data is not None and key in manual_data:
                     result_dictionary[key] = manual_data[key]
-                result_dictionary_deleted_list.append(key)
+                else:
+                    result_dictionary_deleted_list.append(key)
             except Exception as e:
                 log_error(f"Error updating manual dictionary: {e}", source=SOURCE)
+                result_dictionary_deleted_list.append(key)
 
         else:
             try:
