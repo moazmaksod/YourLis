@@ -105,6 +105,7 @@ PATIENT_TEST_SQL = {
     "TABLE_NAME": "[patienttest]",
     "COLUMN_NAME": {"TEST_CODE": "[testcode]", "RESULT_STATE": "[resultfinsh]"},
     "CONDITION": {"PATIENT_ID": "[patientid]"},
+    "RETURN_ALL": True,
 }
 
 

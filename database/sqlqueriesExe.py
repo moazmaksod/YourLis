@@ -5,7 +5,7 @@ from database.sqlconnection import get_db_connection_context
 SOURCE = "Database"
 
 
-def querie_exe(data, expect_results=True):
+def querie_exe(data, expect_results=True, return_all=False):
     """
     Executes the provided SQL query with the given values. Handles SELECT, INSERT, UPDATE, and DELETE queries.
     Acquires and returns connections via a thread-safe connection pool, preventing connection leaks.
@@ -14,10 +14,14 @@ def querie_exe(data, expect_results=True):
         data (tuple): A tuple containing the SQL query and the values to be inserted, updated, fetched, or deleted.
                       Example: (query, values)
         expect_results (bool): Whether to expect a result set from the query. Defaults to True.
+        return_all (bool): For SELECT queries, whether to return all matching rows as a list of dicts.
+                           Defaults to False (returns a dict for the first row).
 
     Returns:
-        result (dict or None):
-            - For SELECT queries, returns a dictionary with column names as keys and corresponding values from the first row.
+        result (dict, list or None):
+            - For SELECT queries with return_all=False, returns a dictionary with column names as keys
+              and corresponding values from the first row.
+            - For SELECT queries with return_all=True, returns a list of dictionaries for all matching rows.
             - For non-SELECT queries (INSERT, UPDATE, DELETE), returns None after committing the transaction.
     """
     log_info("Starting query execution.", source=SOURCE)
@@ -39,6 +43,11 @@ def querie_exe(data, expect_results=True):
                     source=SOURCE,
                 )
                 if results:
+                    if return_all:
+                        return [
+                            {var: item for var, item in zip(selected_value_variable, row)}
+                            for row in results
+                        ]
                     selected_value = {
                         var: item for var, item in zip(selected_value_variable, results[0])
                     }

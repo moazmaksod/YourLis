@@ -79,6 +79,52 @@ def test_handel_result_message(mocker, mock_logger):
     ack = handel_result_message(hl7_msg, msg_id)
     assert "MSA|AA|" in ack # Success
 
+def test_handel_result_message_multi_test_list(mocker, mock_logger):
+    # Mock database interactions returning multiple requested tests for the visit
+    mock_insert = mocker.patch("hl7msghandel.hl7responder.data_insert_for")
+    mocker.patch("hl7msghandel.hl7responder.data_update_for")
+    mocker.patch("hl7msghandel.hl7responder.data_select_for", side_effect=[
+        [
+            {"TEST_CODE": 12, "RESULT_STATE": 0},  # Glucose (not CBC)
+            {"TEST_CODE": 56, "RESULT_STATE": 0},  # CBC (matches!)
+            {"TEST_CODE": 34, "RESULT_STATE": 0},  # Lipid
+        ],
+        {"REQ_DATE": "20260101", "NAME": "Ahmed"}, # patient_info
+        None # result_exist (new record)
+    ])
+
+    hl7_msg = MagicMock()
+    msg_id = "MSG_MULTI_1"
+
+    mocker.patch("hl7msghandel.hl7responder.CBC_TEST_CODE", 56)
+    mocker.patch("hl7msghandel.hl7responder.TEST_FINISH_CODE", False)
+
+    ack = handel_result_message(hl7_msg, msg_id)
+    assert "MSA|AA|MSG_MULTI_1|" in ack
+    mock_insert.assert_called_once()
+
+def test_handel_result_message_unrelated_tests_nak(mocker, mock_logger):
+    # Mock database returning tests that do NOT include CBC (56) or HGB (50)
+    mock_insert = mocker.patch("hl7msghandel.hl7responder.data_insert_for")
+    mocker.patch("hl7msghandel.hl7responder.data_select_for", side_effect=[
+        [
+            {"TEST_CODE": 12, "RESULT_STATE": 0},
+            {"TEST_CODE": 99, "RESULT_STATE": 0},
+        ],
+        {"REQ_DATE": "20260101", "NAME": "Ahmed"},
+        None
+    ])
+
+    hl7_msg = MagicMock()
+    msg_id = "MSG_UNRELATED_1"
+
+    mocker.patch("hl7msghandel.hl7responder.CBC_TEST_CODE", 56)
+    mocker.patch("hl7msghandel.hl7responder.TEST_FINISH_CODE", False)
+
+    ack = handel_result_message(hl7_msg, msg_id)
+    assert "MSA|AE|MSG_UNRELATED_1|" in ack
+    mock_insert.assert_not_called()
+
 def test_generate_response_message_oru_r01(mocker, mock_logger):
     hl7_msg = MagicMock()
     # Mock MSH segment for type detection

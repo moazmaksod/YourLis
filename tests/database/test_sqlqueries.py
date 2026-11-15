@@ -16,6 +16,16 @@ def test_querie_exe_select(mock_db_connection, mock_logger):
     assert result == {"ID": 1, "Name": "Test"}
     cursor.execute.assert_called_with("SELECT * FROM table", ())
 
+def test_querie_exe_select_return_all(mock_db_connection, mock_logger):
+    conn, cursor = mock_db_connection
+    cursor.fetchall.return_value = [(1, "Test1"), (2, "Test2")]
+
+    data = ("SELECT * FROM table", (), ("ID", "Name"))
+    result = querie_exe(data, return_all=True)
+
+    assert result == [{"ID": 1, "Name": "Test1"}, {"ID": 2, "Name": "Test2"}]
+    cursor.execute.assert_called_with("SELECT * FROM table", ())
+
 def test_querie_exe_select_no_results(mock_db_connection, mock_logger):
     conn, cursor = mock_db_connection
     cursor.fetchall.return_value = []
@@ -120,6 +130,29 @@ def test_data_select_for(mocker, mock_logger):
 
     assert "SELECT Col1_DB FROM [dbo].TestTable" in sql
     assert values == ("CondVal1",)
+
+def test_data_select_for_return_all_schema(mocker, mock_logger):
+    mocker.patch("database.sqlqueries.update_hl7_dictionary", return_value={
+        "CONDITION": {"Cond1": "CondVal1"}
+    })
+
+    mock_querie_exe = mocker.patch("database.sqlqueries.querie_exe", return_value=[{"Col1": "Val1"}, {"Col1": "Val2"}])
+
+    db_schema = {
+        "TABLE_NAME": "TestTable",
+        "COLUMN_NAME": {"Col1": "Col1_DB"},
+        "CONDITION": {"Cond1": "Cond1_DB"},
+        "RETURN_ALL": True,
+    }
+    hl7_dict = {"CONDITION": {}}
+    hl7_msg = mocker.MagicMock()
+
+    result = data_select_for(db_schema, hl7_dict, hl7_msg)
+
+    assert result == [{"Col1": "Val1"}, {"Col1": "Val2"}]
+    mock_querie_exe.assert_called_once()
+    _, kwargs = mock_querie_exe.call_args
+    assert kwargs.get("return_all") is True
 
 def test_exec_procedure_for(mocker, mock_logger):
     mock_querie_exe = mocker.patch("database.sqlqueries.querie_exe", return_value="Result")

@@ -136,7 +136,7 @@ def data_update_for(
 
 
 def data_select_for(
-    db_schema: dict, hl7_dictionary: dict, hl7_message, sql_data=None, manual_data=None
+    db_schema: dict, hl7_dictionary: dict, hl7_message, sql_data=None, manual_data=None, return_all: bool = False
 ):
     """
     this function generates an SQL query for selecting data from a table.
@@ -145,8 +145,9 @@ def data_select_for(
     Args:
         connection (object): The database connection object.
         db_schema (dict): A dictionary containing the database schema dictionary as input.
+        return_all (bool): Whether to return all matching rows as a list of dicts. Defaults to False.
     Returns:
-        select_value: The select value from select query.
+        select_value: The select value from select query (dict if return_all=False, list of dicts if return_all=True).
     """
 
     hl7_dictionary = update_hl7_dictionary(
@@ -187,7 +188,8 @@ def data_select_for(
 
     data = (sql, values, selected_value_variable)
 
-    return querie_exe(data)
+    should_return_all = db_schema.get("RETURN_ALL", False) or return_all
+    return querie_exe(data, return_all=should_return_all)
 
 
 def data_delete_for(

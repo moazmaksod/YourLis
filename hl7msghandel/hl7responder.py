@@ -120,19 +120,26 @@ def handel_result_message(hl7_message, msg_id):
             PATIENT_TEST_SQL, PATIENT_TEST_HL7, hl7_message
         )
 
-        test_code = None
-        test_finish = None
+        # Normalize to list of dicts (handles both return_all=True list and legacy/mocked single dict)
+        if isinstance(patient_requested, dict):
+            requested_tests = [patient_requested]
+        elif isinstance(patient_requested, list):
+            requested_tests = patient_requested
+        else:
+            requested_tests = []
 
-        if patient_requested and type(patient_requested) == dict:
-
-            try:
-                test_code = patient_requested["TEST_CODE"]
-                test_finish = patient_requested["RESULT_STATE"]
-            except Exception as e:
-                log_error(
-                    f"Error retrieving patient request test list from MSSQL: {e}",
-                    source=SOURCE,
-                )
+        if requested_tests:
+            # Check if CBC or HGB test code is pending among the requested tests
+            has_cbc = any(
+                str(t.get("TEST_CODE")) == str(CBC_TEST_CODE)
+                and (t.get("RESULT_STATE") == TEST_FINISH_CODE or str(t.get("RESULT_STATE")).lower() in ("0", "false"))
+                for t in requested_tests
+            )
+            has_hgb = any(
+                str(t.get("TEST_CODE")) == str(HGB_TEST_CODE)
+                and (t.get("RESULT_STATE") == TEST_FINISH_CODE or str(t.get("RESULT_STATE")).lower() in ("0", "false"))
+                for t in requested_tests
+            )
 
             # Get patient info for request date from MSSQL
             patient_info = data_select_for(
@@ -142,7 +149,7 @@ def handel_result_message(hl7_message, msg_id):
 
             patient_name = None
 
-            if patient_info and type(patient_info) == dict:
+            if patient_info and isinstance(patient_info, dict):
                 try:
                     request_date["REQ_DATE"] = patient_info["REQ_DATE"]
                     patient_name = patient_info["NAME"]
@@ -155,7 +162,7 @@ def handel_result_message(hl7_message, msg_id):
                     RESULT_EXIST_SQL, RESULT_EXIST_HL7, hl7_message
                 )
 
-                if test_code == CBC_TEST_CODE and test_finish == TEST_FINISH_CODE:
+                if has_cbc:
                     if not result_exist:
                         # insert the new record
                         data_insert_for(
@@ -175,8 +182,7 @@ def handel_result_message(hl7_message, msg_id):
                             source=SOURCE,
                         )
 
-                elif test_code == HGB_TEST_CODE and test_finish == TEST_FINISH_CODE:
-
+                elif has_hgb:
                     if not result_exist:
                         # insert the new record
                         data_insert_for(
@@ -196,8 +202,9 @@ def handel_result_message(hl7_message, msg_id):
                             source=SOURCE,
                         )
                 else:
+                    requested_codes = [t.get("TEST_CODE") for t in requested_tests]
                     log_error(
-                        f"Unknown test code {test_code}, message NO.:{msg_id}.",
+                        f"Neither CBC ({CBC_TEST_CODE}) nor HGB ({HGB_TEST_CODE}) found pending in requested tests {requested_codes}, message NO.:{msg_id}.",
                         source=SOURCE,
                     )
                     ack_code = False
